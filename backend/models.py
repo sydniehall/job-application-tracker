@@ -51,3 +51,40 @@ class Application(SQLModel, table=True):
     )
 
     owner: Optional["User"] = Relationship(back_populates="applications")
+
+
+class UserCreate(SQLModel):
+    email: str
+    password: str
+
+
+class UserRead(SQLModel):
+    id: int
+    email: str
+    created_at: Optional[datetime]
+
+
+class ApplicationCreate(SQLModel):
+    company: str
+    role: str
+    status: str = "Applied"
+    date_applied: Optional[datetime] = None
+    deadline: Optional[date] = None
+    job_url: Optional[str] = None
+    notes: Optional[str] = None
+    resume_version: Optional[str] = None
+
+
+class ApplicationRead(SQLModel):
+    id: int
+    user_id: int
+    company: str
+    role: str
+    status: str
+    date_applied: Optional[datetime]
+    deadline: Optional[date]
+    job_url: Optional[str]
+    notes: Optional[str]
+    resume_version: Optional[str]
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
