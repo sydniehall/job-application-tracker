@@ -12,3 +12,8 @@ dist/
 
 # Env files
 .env
+
+# VS code
+.vscode/
+
+Personal Notes.md
