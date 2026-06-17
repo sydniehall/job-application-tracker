@@ -88,3 +88,23 @@ class ApplicationRead(SQLModel):
     resume_version: Optional[str]
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
+
+
+class ApplicationUpdate(SQLModel):
+    company: Optional[str] = None
+    role: Optional[str] = None
+    status: Optional[str] = None
+    date_applied: Optional[datetime] = None
+    deadline: Optional[date] = None
+    job_url: Optional[str] = None
+    notes: Optional[str] = None
+    resume_version: Optional[str] = None
+
+
+class Token(SQLModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class TokenData(SQLModel):
+    email: Optional[str] = None
