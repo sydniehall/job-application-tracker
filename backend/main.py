@@ -5,6 +5,16 @@ from database import create_db_and_tables, get_db
 from models import (
     Application, ApplicationCreate, ApplicationRead,
     User, UserCreate, UserRead
+) 
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # your Vite dev server
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @asynccontextmanager
