@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from typing import Optional, List
+from pydantic import EmailStr
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, DateTime, Text
 from sqlalchemy.sql import func
@@ -54,7 +55,7 @@ class Application(SQLModel, table=True):
 
 
 class UserCreate(SQLModel):
-    email: str
+    email: EmailStr
     password: str
 
 
