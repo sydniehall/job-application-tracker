@@ -102,6 +102,10 @@ class ApplicationUpdate(SQLModel):
     resume_version: Optional[str] = None
 
 
+class DeleteAccount(SQLModel):
+    password: str
+
+
 class Token(SQLModel):
     access_token: str
     token_type: str = "bearer"
