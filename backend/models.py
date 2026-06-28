@@ -1,9 +1,19 @@
 from datetime import date, datetime
+from enum import Enum
 from typing import Optional, List
 from pydantic import EmailStr
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, DateTime, Text
 from sqlalchemy.sql import func
+
+
+class ApplicationStatus(str, Enum):
+    applied = "Applied"
+    screening = "Screening"
+    interview = "Interview"
+    offer = "Offer"
+    rejected = "Rejected"
+    withdrawn = "Withdrawn"
 
 
 class User(SQLModel, table=True):
@@ -30,7 +40,7 @@ class Application(SQLModel, table=True):
     user_id: int = Field(foreign_key="users.id")
     company: str
     role: str
-    status: str = Field(default="Applied")
+    status: ApplicationStatus = Field(default=ApplicationStatus.applied)
     date_applied: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True)
@@ -68,7 +78,7 @@ class UserRead(SQLModel):
 class ApplicationCreate(SQLModel):
     company: str
     role: str
-    status: str = "Applied"
+    status: ApplicationStatus = ApplicationStatus.applied
     date_applied: Optional[datetime] = None
     deadline: Optional[date] = None
     job_url: Optional[str] = None
@@ -81,7 +91,7 @@ class ApplicationRead(SQLModel):
     user_id: int
     company: str
     role: str
-    status: str
+    status: ApplicationStatus
     date_applied: Optional[datetime]
     deadline: Optional[date]
     job_url: Optional[str]
@@ -94,7 +104,7 @@ class ApplicationRead(SQLModel):
 class ApplicationUpdate(SQLModel):
     company: Optional[str] = None
     role: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[ApplicationStatus] = None
     date_applied: Optional[datetime] = None
     deadline: Optional[date] = None
     job_url: Optional[str] = None
