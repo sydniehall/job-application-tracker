@@ -1,17 +1,12 @@
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
 .DS_Store
-
-# Python
-venv/
-__pycache__/
-*.pyc
-*.db
-
-# Node
-node_modules/
-dist/
-
-# Env files
-.env
-
-# VS code
-.vscode/
