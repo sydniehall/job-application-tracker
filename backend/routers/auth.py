@@ -47,6 +47,11 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     return Token(access_token=token)
 
 
+@router.get("/me", response_model=UserRead)
+def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
 @router.delete("/me", status_code=204)
 def delete_account(
     body: DeleteAccount,
