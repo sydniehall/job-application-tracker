@@ -8,6 +8,7 @@ from sqlalchemy.sql import func
 
 
 class ApplicationStatus(str, Enum):
+    to_apply = "To Apply"
     applied = "Applied"
     screening = "Screening"
     interview = "Interview"

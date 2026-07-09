@@ -1,6 +1,7 @@
 // Mirrors backend models.py schemas. Dates/datetimes arrive as ISO strings from JSON.
 
 export const ApplicationStatus = {
+  ToApply: "To Apply",
   Applied: "Applied",
   Screening: "Screening",
   Interview: "Interview",
