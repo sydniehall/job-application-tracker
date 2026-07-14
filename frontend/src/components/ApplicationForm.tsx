@@ -1,5 +1,15 @@
 import { useState } from "react";
 import type { SubmitEvent } from "react";
+import {
+  Alert,
+  Button,
+  Card,
+  Field,
+  Flex,
+  Input,
+  NativeSelect,
+  Stack,
+} from "@chakra-ui/react";
 import { ApplicationStatus } from "../index";
 import type { ApplicationCreate } from "../index";
 
@@ -60,89 +70,85 @@ export function ApplicationForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="bg-white rounded-lg shadow-sm p-4 mb-4 space-y-3"
-    >
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <div className="flex gap-3">
-        <input
-          type="text"
-          placeholder="Company"
-          value={company}
-          onChange={(e) => setCompany(e.target.value)}
-          required
-          autoFocus
-          className="flex-1 border rounded px-3 py-2 text-sm"
-        />
-        <input
-          type="text"
-          placeholder="Role"
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-          required
-          className="flex-1 border rounded px-3 py-2 text-sm"
-        />
-      </div>
-      <div className="flex gap-3">
-        <label className="flex-1 text-xs text-gray-500">
-          Status
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as ApplicationStatus)}
-            className="w-full border rounded px-3 py-2 text-sm text-gray-900 mt-1"
-          >
-            {Object.values(ApplicationStatus).map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <div className="flex gap-3">
-        <label className="flex-1 text-xs text-gray-500">
-          Applied Date
-          <input
-            type="date"
-            value={isToApply ? "" : dateApplied ?? ""}
-            onChange={(e) => setDateApplied(e.target.value)}
-            disabled={isToApply}
-            className="w-full border rounded px-3 py-2 text-sm text-gray-900 mt-1 disabled:bg-gray-100 disabled:text-gray-400"
-          />
-        </label>
-        <label className="flex-1 text-xs text-gray-500">
-          Deadline
-          <input
-            type="date"
-            value={deadline ?? ""}
-            onChange={(e) => setDeadline(e.target.value)}
-            onFocus={() => setDeadlineFocused(true)}
-            onBlur={() => setDeadlineFocused(false)}
-            className={`w-full border rounded px-3 py-2 text-sm text-gray-900 mt-1 ${
-              !deadline && !deadlineFocused
-                ? "[&::-webkit-datetime-edit]:text-transparent"
-                : ""
-            }`}
-          />
-        </label>
-      </div>
-      <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="text-sm text-gray-500 px-3 py-2"
-        >
+    <Card.Root as="form" onSubmit={handleSubmit}>
+      <Card.Body>
+        <Stack gap="4">
+          {error && (
+            <Alert.Root status="error" size="sm">
+              <Alert.Indicator />
+              <Alert.Title>{error}</Alert.Title>
+            </Alert.Root>
+          )}
+          <Flex gap="4">
+            <Field.Root required flex="1">
+              <Field.Label>
+                Company <Field.RequiredIndicator />
+              </Field.Label>
+              <Input
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                autoFocus
+              />
+            </Field.Root>
+            <Field.Root required flex="1">
+              <Field.Label>
+                Role <Field.RequiredIndicator />
+              </Field.Label>
+              <Input value={role} onChange={(e) => setRole(e.target.value)} />
+            </Field.Root>
+          </Flex>
+          <Field.Root>
+            <Field.Label>Status</Field.Label>
+            <NativeSelect.Root>
+              <NativeSelect.Field
+                value={status}
+                onChange={(e) => setStatus(e.target.value as ApplicationStatus)}
+              >
+                {Object.values(ApplicationStatus).map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
+          </Field.Root>
+          <Flex gap="4">
+            <Field.Root flex="1" disabled={isToApply}>
+              <Field.Label>Applied Date</Field.Label>
+              <Input
+                type="date"
+                value={isToApply ? "" : dateApplied ?? ""}
+                onChange={(e) => setDateApplied(e.target.value)}
+                disabled={isToApply}
+              />
+            </Field.Root>
+            <Field.Root flex="1">
+              <Field.Label>Deadline</Field.Label>
+              <Input
+                type="date"
+                value={deadline ?? ""}
+                onChange={(e) => setDeadline(e.target.value)}
+                onFocus={() => setDeadlineFocused(true)}
+                onBlur={() => setDeadlineFocused(false)}
+                css={
+                  !deadline && !deadlineFocused
+                    ? { "&::-webkit-datetime-edit": { color: "transparent" } }
+                    : undefined
+                }
+              />
+            </Field.Root>
+          </Flex>
+        </Stack>
+      </Card.Body>
+      <Card.Footer justifyContent="flex-end" gap="2">
+        <Button type="button" onClick={onCancel} variant="ghost">
           Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="bg-blue-600 text-white rounded px-3 py-2 text-sm font-semibold disabled:opacity-50"
-        >
+        </Button>
+        <Button type="submit" colorPalette="blue" loading={isSubmitting}>
           {submitLabel}
-        </button>
-      </div>
-    </form>
+        </Button>
+      </Card.Footer>
+    </Card.Root>
   );
 }

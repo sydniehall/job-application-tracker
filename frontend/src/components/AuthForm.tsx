@@ -1,6 +1,18 @@
 import { useState } from "react";
 import type { SubmitEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link as RouterLink } from "react-router-dom";
+import {
+  Alert,
+  Button,
+  Card,
+  Center,
+  Field,
+  Heading,
+  Input,
+  Link,
+  Stack,
+  Text,
+} from "@chakra-ui/react";
 
 interface AuthFormProps {
   mode: "login" | "register";
@@ -29,46 +41,67 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-8 rounded shadow-md w-full max-w-sm space-y-4"
-      >
-        <h1 className="text-2xl font-bold text-center">
-          {isLogin ? "Log In" : "Register"}
-        </h1>
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="w-full border rounded px-3 py-2"
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={isLogin ? undefined : 8}
-          className="w-full border rounded px-3 py-2"
-        />
-        <button
-          type="submit"
-          className="w-full bg-blue-600 text-white rounded px-3 py-2 font-semibold"
-        >
-          {isLogin ? "Log In" : "Register"}
-        </button>
-        <p className="text-sm text-center">
-          {isLogin ? (
-            <>Don't have an account? <Link to="/register" className="text-blue-600">Register</Link></>
-          ) : (
-            <>Already have an account? <Link to="/login" className="text-blue-600">Log in</Link></>
-          )}
-        </p>
-      </form>
-    </div>
+    <Center minH="100vh" bg="bg.subtle" px="4">
+      <Card.Root as="form" onSubmit={handleSubmit} w="full" maxW="sm">
+        <Card.Header>
+          <Heading size="xl" textAlign="center">
+            {isLogin ? "Log In" : "Register"}
+          </Heading>
+        </Card.Header>
+        <Card.Body>
+          <Stack gap="4">
+            {error && (
+              <Alert.Root status="error" size="sm">
+                <Alert.Indicator />
+                <Alert.Title>{error}</Alert.Title>
+              </Alert.Root>
+            )}
+            <Field.Root required>
+              <Field.Label>
+                Email <Field.RequiredIndicator />
+              </Field.Label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </Field.Root>
+            <Field.Root required>
+              <Field.Label>
+                Password <Field.RequiredIndicator />
+              </Field.Label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={isLogin ? undefined : 8}
+              />
+            </Field.Root>
+          </Stack>
+        </Card.Body>
+        <Card.Footer flexDirection="column" gap="3">
+          <Button type="submit" colorPalette="blue" w="full">
+            {isLogin ? "Log In" : "Register"}
+          </Button>
+          <Text textStyle="sm" color="fg.muted" textAlign="center">
+            {isLogin ? (
+              <>
+                Don't have an account?{" "}
+                <Link asChild color="blue.fg">
+                  <RouterLink to="/register">Register</RouterLink>
+                </Link>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <Link asChild color="blue.fg">
+                  <RouterLink to="/login">Log in</RouterLink>
+                </Link>
+              </>
+            )}
+          </Text>
+        </Card.Footer>
+      </Card.Root>
+    </Center>
   );
 }

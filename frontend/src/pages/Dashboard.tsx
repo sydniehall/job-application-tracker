@@ -1,4 +1,21 @@
 import { useEffect, useState } from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  Center,
+  Container,
+  EmptyState,
+  Flex,
+  Heading,
+  IconButton,
+  Spinner,
+  Stack,
+  StackSeparator,
+  Text,
+} from "@chakra-ui/react";
+import { LuInbox, LuPlus, LuX } from "react-icons/lu";
 import { useAuth } from "../context/AuthContext";
 import {
   createApplication,
@@ -68,108 +85,154 @@ export function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-xl font-semibold">Job Applications</h1>
-            <p className="text-sm text-gray-500">
+    <Box minH="100vh" bg="bg.subtle" py="8">
+      <Container maxW="3xl">
+        <Flex justify="space-between" align="center" mb="6">
+          <Box>
+            <Heading size="xl">Job Applications</Heading>
+            <Text textStyle="sm" color="fg.muted">
               {user?.email} · {applications.length} application
               {applications.length === 1 ? "" : "s"}
-            </p>
-          </div>
-          <button
-            onClick={logout}
-            className="text-sm text-gray-500 hover:text-gray-800"
-          >
+            </Text>
+          </Box>
+          <Button onClick={logout} variant="ghost" size="sm" color="fg.muted">
             Log out
-          </button>
-        </div>
+          </Button>
+        </Flex>
 
         {!isAdding && (
-          <button
+          <Button
             onClick={() => setIsAdding(true)}
-            className="w-full mb-4 border-2 border-dashed border-gray-300 rounded-lg py-4 text-sm font-medium text-gray-500 hover:border-blue-400 hover:text-blue-600"
+            variant="outline"
+            w="full"
+            mb="4"
+            borderStyle="dashed"
+            color="fg.muted"
+            _hover={{ color: "blue.fg", borderColor: "blue.emphasized" }}
           >
-            + Add Application
-          </button>
+            <LuPlus /> Add Application
+          </Button>
         )}
 
         {isAdding && (
-          <ApplicationForm
-            submitLabel="Add"
-            onSubmit={handleAdd}
-            onCancel={() => setIsAdding(false)}
-          />
+          <Box mb="4">
+            <ApplicationForm
+              submitLabel="Add"
+              onSubmit={handleAdd}
+              onCancel={() => setIsAdding(false)}
+            />
+          </Box>
         )}
 
-        {isLoading && <p className="text-sm text-gray-500">Loading...</p>}
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {isLoading && (
+          <Center py="10">
+            <Spinner color="fg.muted" />
+          </Center>
+        )}
+        {error && (
+          <Alert.Root status="error">
+            <Alert.Indicator />
+            <Alert.Title>{error}</Alert.Title>
+          </Alert.Root>
+        )}
 
         {!isLoading && !error && applications.length === 0 && (
-          <p className="text-sm text-gray-500">No applications yet.</p>
+          <EmptyState.Root>
+            <EmptyState.Content>
+              <EmptyState.Indicator>
+                <LuInbox />
+              </EmptyState.Indicator>
+              <EmptyState.Title>No applications yet</EmptyState.Title>
+              <EmptyState.Description>
+                Add your first application to start tracking.
+              </EmptyState.Description>
+            </EmptyState.Content>
+          </EmptyState.Root>
         )}
 
         {!isLoading && !error && applications.length > 0 && (
-          <div className="bg-white rounded-lg shadow-sm divide-y">
-            {applications.map((app) =>
-              editingId === app.id ? (
-                <div key={app.id} className="p-4">
-                  <ApplicationForm
-                    initial={app}
-                    submitLabel="Save"
-                    onSubmit={(data) => handleEdit(app.id, data)}
-                    onCancel={() => setEditingId(null)}
-                  />
-                </div>
-              ) : (
-                <div
-                  key={app.id}
-                  className="flex items-center justify-between px-4 py-3 group"
-                >
-                  <button
-                    onClick={() => setEditingId(app.id)}
-                    className="text-left flex-1"
-                  >
-                    <p className="font-medium">{app.company}</p>
-                    <p className="text-sm text-gray-500">{app.role}</p>
-                  </button>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-400">
-                      {formatDate(app.date_applied)}
-                    </span>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100">
-                      <button
-                        onClick={() => handleSetStatus(app, ApplicationStatus.Offer)}
-                        className="text-xs font-medium text-green-600 hover:underline"
-                      >
-                        Offer
-                      </button>
-                      <button
-                        onClick={() => handleSetStatus(app, ApplicationStatus.Rejected)}
-                        className="text-xs font-medium text-red-600 hover:underline"
-                      >
-                        Rejection
-                      </button>
-                    </div>
-                    <StatusBadge
-                      status={app.status}
-                      onClick={() => handleSetStatus(app, nextStatus(app.status))}
+          <Card.Root>
+            <Stack gap="0" separator={<StackSeparator />}>
+              {applications.map((app) =>
+                editingId === app.id ? (
+                  <Box key={app.id} p="4">
+                    <ApplicationForm
+                      initial={app}
+                      submitLabel="Save"
+                      onSubmit={(data) => handleEdit(app.id, data)}
+                      onCancel={() => setEditingId(null)}
                     />
-                    <button
-                      onClick={() => handleDelete(app.id)}
-                      className="text-sm text-gray-300 hover:text-red-600 opacity-0 group-hover:opacity-100"
-                      title="Delete"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              )
-            )}
-          </div>
+                  </Box>
+                ) : (
+                  <Flex
+                    key={app.id}
+                    align="center"
+                    justify="space-between"
+                    px="4"
+                    py="3"
+                    className="group"
+                  >
+                    <Box asChild textAlign="left" flex="1" cursor="pointer">
+                      <button type="button" onClick={() => setEditingId(app.id)}>
+                        <Text fontWeight="medium">{app.company}</Text>
+                        <Text textStyle="sm" color="fg.muted">
+                          {app.role}
+                        </Text>
+                      </button>
+                    </Box>
+                    <Flex align="center" gap="3">
+                      <Text textStyle="sm" color="fg.subtle">
+                        {formatDate(app.date_applied)}
+                      </Text>
+                      <Flex
+                        align="center"
+                        gap="1"
+                        opacity="0"
+                        _groupHover={{ opacity: 1 }}
+                      >
+                        <Button
+                          onClick={() => handleSetStatus(app, ApplicationStatus.Offer)}
+                          variant="ghost"
+                          size="xs"
+                          colorPalette="green"
+                        >
+                          Offer
+                        </Button>
+                        <Button
+                          onClick={() => handleSetStatus(app, ApplicationStatus.Rejected)}
+                          variant="ghost"
+                          size="xs"
+                          colorPalette="red"
+                        >
+                          Rejection
+                        </Button>
+                      </Flex>
+                      <StatusBadge
+                        status={app.status}
+                        onClick={() => handleSetStatus(app, nextStatus(app.status))}
+                      />
+                      <IconButton
+                        onClick={() => handleDelete(app.id)}
+                        aria-label="Delete application"
+                        title="Delete"
+                        variant="ghost"
+                        size="xs"
+                        colorPalette="red"
+                        color="fg.subtle"
+                        opacity="0"
+                        _groupHover={{ opacity: 1 }}
+                        _hover={{ color: "fg.error" }}
+                      >
+                        <LuX />
+                      </IconButton>
+                    </Flex>
+                  </Flex>
+                )
+              )}
+            </Stack>
+          </Card.Root>
         )}
-      </div>
-    </div>
+      </Container>
+    </Box>
   );
 }

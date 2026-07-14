@@ -1,13 +1,14 @@
+import { Badge } from "@chakra-ui/react";
 import { ApplicationStatus } from "../index";
 
-const COLORS: Record<ApplicationStatus, string> = {
-  [ApplicationStatus.ToApply]: "bg-slate-100 text-slate-600",
-  [ApplicationStatus.Applied]: "bg-blue-100 text-blue-700",
-  [ApplicationStatus.Screening]: "bg-purple-100 text-purple-700",
-  [ApplicationStatus.Interview]: "bg-amber-100 text-amber-700",
-  [ApplicationStatus.Offer]: "bg-green-100 text-green-700",
-  [ApplicationStatus.Rejected]: "bg-red-100 text-red-700",
-  [ApplicationStatus.Withdrawn]: "bg-gray-100 text-gray-600",
+const PALETTES: Record<ApplicationStatus, string> = {
+  [ApplicationStatus.ToApply]: "gray",
+  [ApplicationStatus.Applied]: "blue",
+  [ApplicationStatus.Screening]: "purple",
+  [ApplicationStatus.Interview]: "orange",
+  [ApplicationStatus.Offer]: "green",
+  [ApplicationStatus.Rejected]: "red",
+  [ApplicationStatus.Withdrawn]: "gray",
 };
 
 interface StatusBadgeProps {
@@ -17,15 +18,21 @@ interface StatusBadgeProps {
 
 export function StatusBadge({ status, onClick }: StatusBadgeProps) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={onClick ? "Click to advance status" : undefined}
-      className={`text-xs font-medium px-2 py-1 rounded-full ${COLORS[status]} ${
-        onClick ? "cursor-pointer hover:opacity-75" : "cursor-default"
-      }`}
+    <Badge
+      asChild
+      colorPalette={PALETTES[status]}
+      variant={status === ApplicationStatus.ToApply ? "outline" : "subtle"}
+      rounded="full"
+      cursor={onClick ? "pointer" : "default"}
+      _hover={onClick ? { opacity: 0.75 } : undefined}
     >
-      {status}
-    </button>
+      <button
+        type="button"
+        onClick={onClick}
+        title={onClick ? "Click to advance status" : undefined}
+      >
+        {status}
+      </button>
+    </Badge>
   );
 }
