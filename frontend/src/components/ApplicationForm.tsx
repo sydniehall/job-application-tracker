@@ -3,17 +3,20 @@ import type { SubmitEvent } from "react";
 import {
   Alert,
   Button,
-  Card,
+  CloseButton,
+  Dialog,
   Field,
   Flex,
   Input,
   NativeSelect,
+  Portal,
   Stack,
 } from "@chakra-ui/react";
 import { ApplicationStatus } from "../index";
 import type { ApplicationCreate } from "../index";
 
 interface ApplicationFormProps {
+  title: string;
   initial?: Partial<ApplicationCreate>;
   submitLabel: string;
   onSubmit: (data: ApplicationCreate) => Promise<void>;
@@ -27,11 +30,13 @@ function localToday(): string {
 }
 
 export function ApplicationForm({
+  title,
   initial,
   submitLabel,
   onSubmit,
   onCancel,
 }: ApplicationFormProps) {
+  const [jobUrl, setJobUrl] = useState(initial?.job_url ?? "");
   const [company, setCompany] = useState(initial?.company ?? "");
   const [role, setRole] = useState(initial?.role ?? "");
   const [status, setStatus] = useState<ApplicationStatus>(
@@ -56,6 +61,7 @@ export function ApplicationForm({
     try {
       const time = new Date().toTimeString().slice(0, 8);
       await onSubmit({
+        job_url: jobUrl || null,
         company,
         role,
         status,
@@ -70,85 +76,116 @@ export function ApplicationForm({
   }
 
   return (
-    <Card.Root as="form" onSubmit={handleSubmit}>
-      <Card.Body>
-        <Stack gap="4">
-          {error && (
-            <Alert.Root status="error" size="sm">
-              <Alert.Indicator />
-              <Alert.Title>{error}</Alert.Title>
-            </Alert.Root>
-          )}
-          <Flex gap="4">
-            <Field.Root required flex="1">
-              <Field.Label>
-                Company <Field.RequiredIndicator />
-              </Field.Label>
-              <Input
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                autoFocus
-              />
-            </Field.Root>
-            <Field.Root required flex="1">
-              <Field.Label>
-                Role <Field.RequiredIndicator />
-              </Field.Label>
-              <Input value={role} onChange={(e) => setRole(e.target.value)} />
-            </Field.Root>
-          </Flex>
-          <Field.Root>
-            <Field.Label>Status</Field.Label>
-            <NativeSelect.Root>
-              <NativeSelect.Field
-                value={status}
-                onChange={(e) => setStatus(e.target.value as ApplicationStatus)}
-              >
-                {Object.values(ApplicationStatus).map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
-          </Field.Root>
-          <Flex gap="4">
-            <Field.Root flex="1" disabled={isToApply}>
-              <Field.Label>Applied Date</Field.Label>
-              <Input
-                type="date"
-                value={isToApply ? "" : dateApplied ?? ""}
-                onChange={(e) => setDateApplied(e.target.value)}
-                disabled={isToApply}
-              />
-            </Field.Root>
-            <Field.Root flex="1">
-              <Field.Label>Deadline</Field.Label>
-              <Input
-                type="date"
-                value={deadline ?? ""}
-                onChange={(e) => setDeadline(e.target.value)}
-                onFocus={() => setDeadlineFocused(true)}
-                onBlur={() => setDeadlineFocused(false)}
-                css={
-                  !deadline && !deadlineFocused
-                    ? { "&::-webkit-datetime-edit": { color: "transparent" } }
-                    : undefined
-                }
-              />
-            </Field.Root>
-          </Flex>
-        </Stack>
-      </Card.Body>
-      <Card.Footer justifyContent="flex-end" gap="2">
-        <Button type="button" onClick={onCancel} variant="ghost">
-          Cancel
-        </Button>
-        <Button type="submit" colorPalette="blue" loading={isSubmitting}>
-          {submitLabel}
-        </Button>
-      </Card.Footer>
-    </Card.Root>
+    <Dialog.Root open onOpenChange={(e) => !e.open && onCancel()}>
+      <Portal>
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content as="form" onSubmit={handleSubmit}>
+            <Dialog.Header>
+              <Dialog.Title>{title}</Dialog.Title>
+            </Dialog.Header>
+            <Dialog.Body>
+              <Stack gap="4">
+                {error && (
+                  <Alert.Root status="error" size="sm">
+                    <Alert.Indicator />
+                    <Alert.Title>{error}</Alert.Title>
+                  </Alert.Root>
+                )}
+                <Field.Root>
+                  <Field.Label>Job URL</Field.Label>
+                  <Input
+                    type="url"
+                    placeholder="https://..."
+                    value={jobUrl}
+                    onChange={(e) => setJobUrl(e.target.value)}
+                    autoFocus
+                  />
+                </Field.Root>
+                <Flex gap="4">
+                  <Field.Root required flex="1">
+                    <Field.Label>
+                      Company <Field.RequiredIndicator />
+                    </Field.Label>
+                    <Input
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                    />
+                  </Field.Root>
+                  <Field.Root required flex="1">
+                    <Field.Label>
+                      Role <Field.RequiredIndicator />
+                    </Field.Label>
+                    <Input
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                    />
+                  </Field.Root>
+                </Flex>
+                <Field.Root>
+                  <Field.Label>Status</Field.Label>
+                  <NativeSelect.Root>
+                    <NativeSelect.Field
+                      value={status}
+                      onChange={(e) =>
+                        setStatus(e.target.value as ApplicationStatus)
+                      }
+                    >
+                      {Object.values(ApplicationStatus).map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </NativeSelect.Field>
+                    <NativeSelect.Indicator />
+                  </NativeSelect.Root>
+                </Field.Root>
+                <Flex gap="4">
+                  <Field.Root flex="1" disabled={isToApply}>
+                    <Field.Label>Applied Date</Field.Label>
+                    <Input
+                      type="date"
+                      value={isToApply ? "" : dateApplied ?? ""}
+                      onChange={(e) => setDateApplied(e.target.value)}
+                      disabled={isToApply}
+                    />
+                  </Field.Root>
+                  <Field.Root flex="1">
+                    <Field.Label>Deadline</Field.Label>
+                    <Input
+                      type="date"
+                      value={deadline ?? ""}
+                      onChange={(e) => setDeadline(e.target.value)}
+                      onFocus={() => setDeadlineFocused(true)}
+                      onBlur={() => setDeadlineFocused(false)}
+                      css={
+                        !deadline && !deadlineFocused
+                          ? {
+                              "&::-webkit-datetime-edit": {
+                                color: "transparent",
+                              },
+                            }
+                          : undefined
+                      }
+                    />
+                  </Field.Root>
+                </Flex>
+              </Stack>
+            </Dialog.Body>
+            <Dialog.Footer>
+              <Button type="button" onClick={onCancel} variant="ghost">
+                Cancel
+              </Button>
+              <Button type="submit" colorPalette="blue" loading={isSubmitting}>
+                {submitLabel}
+              </Button>
+            </Dialog.Footer>
+            <Dialog.CloseTrigger asChild>
+              <CloseButton size="sm" />
+            </Dialog.CloseTrigger>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Portal>
+    </Dialog.Root>
   );
 }

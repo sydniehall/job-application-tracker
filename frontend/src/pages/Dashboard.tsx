@@ -10,12 +10,20 @@ import {
   Flex,
   Heading,
   IconButton,
+  Link,
   Spinner,
-  Stack,
-  StackSeparator,
+  Table,
   Text,
 } from "@chakra-ui/react";
-import { LuInbox, LuPlus, LuX } from "react-icons/lu";
+import {
+  LuDollarSign,
+  LuExternalLink,
+  LuHeartCrack,
+  LuInbox,
+  LuLogOut,
+  LuPlus,
+  LuTrash2,
+} from "react-icons/lu";
 import { useAuth } from "../context/AuthContext";
 import {
   createApplication,
@@ -40,10 +48,15 @@ function nextStatus(current: ApplicationStatus): ApplicationStatus {
   return STATUS_CYCLE[(index + 1) % STATUS_CYCLE.length];
 }
 
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
 function formatDate(dateApplied: string | null): string {
   if (!dateApplied) return "—";
   const [year, month, day] = dateApplied.split("T")[0].split("-");
-  return `${month}/${day}/${year}`;
+  return `${MONTHS[Number(month) - 1]} ${Number(day)}, ${year}`;
 }
 
 export function Dashboard() {
@@ -53,6 +66,8 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+
+  const editingApp = applications.find((a) => a.id === editingId);
 
   useEffect(() => {
     getApplications()
@@ -96,32 +111,39 @@ export function Dashboard() {
             </Text>
           </Box>
           <Button onClick={logout} variant="ghost" size="sm" color="fg.muted">
-            Log out
+            <LuLogOut /> Log out
           </Button>
         </Flex>
 
-        {!isAdding && (
-          <Button
-            onClick={() => setIsAdding(true)}
-            variant="outline"
-            w="full"
-            mb="4"
-            borderStyle="dashed"
-            color="fg.muted"
-            _hover={{ color: "blue.fg", borderColor: "blue.emphasized" }}
-          >
-            <LuPlus /> Add Application
-          </Button>
-        )}
+        <Button
+          onClick={() => setIsAdding(true)}
+          variant="outline"
+          w="full"
+          mb="4"
+          borderStyle="dashed"
+          color="fg.muted"
+          _hover={{ color: "blue.fg", borderColor: "blue.emphasized" }}
+        >
+          <LuPlus /> Add Application
+        </Button>
 
         {isAdding && (
-          <Box mb="4">
-            <ApplicationForm
-              submitLabel="Add"
-              onSubmit={handleAdd}
-              onCancel={() => setIsAdding(false)}
-            />
-          </Box>
+          <ApplicationForm
+            title="Add Application"
+            submitLabel="Add"
+            onSubmit={handleAdd}
+            onCancel={() => setIsAdding(false)}
+          />
+        )}
+
+        {editingApp && (
+          <ApplicationForm
+            title="Edit Application"
+            initial={editingApp}
+            submitLabel="Save"
+            onSubmit={(data) => handleEdit(editingApp.id, data)}
+            onCancel={() => setEditingId(null)}
+          />
         )}
 
         {isLoading && (
@@ -151,85 +173,141 @@ export function Dashboard() {
         )}
 
         {!isLoading && !error && applications.length > 0 && (
-          <Card.Root>
-            <Stack gap="0" separator={<StackSeparator />}>
-              {applications.map((app) =>
-                editingId === app.id ? (
-                  <Box key={app.id} p="4">
-                    <ApplicationForm
-                      initial={app}
-                      submitLabel="Save"
-                      onSubmit={(data) => handleEdit(app.id, data)}
-                      onCancel={() => setEditingId(null)}
-                    />
-                  </Box>
-                ) : (
-                  <Flex
-                    key={app.id}
-                    align="center"
-                    justify="space-between"
-                    px="4"
-                    py="3"
-                    className="group"
-                  >
-                    <Box asChild textAlign="left" flex="1" cursor="pointer">
-                      <button type="button" onClick={() => setEditingId(app.id)}>
-                        <Text fontWeight="medium">{app.company}</Text>
-                        <Text textStyle="sm" color="fg.muted">
-                          {app.role}
+          <Card.Root overflow="hidden">
+            <Table.Root size="sm" tableLayout="fixed">
+              <Table.Header>
+                <Table.Row bg="bg.muted">
+                  <Table.ColumnHeader>Role</Table.ColumnHeader>
+                  <Table.ColumnHeader>Company</Table.ColumnHeader>
+                  <Table.ColumnHeader w="110px" textAlign="center">
+                    Date Applied
+                  </Table.ColumnHeader>
+                  <Table.ColumnHeader w="110px" textAlign="center">
+                    Deadline
+                  </Table.ColumnHeader>
+                  <Table.ColumnHeader w="105px" textAlign="center">
+                    Status
+                  </Table.ColumnHeader>
+                  <Table.ColumnHeader w="110px" textAlign="center">
+                    Actions
+                  </Table.ColumnHeader>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {applications.map((app) => (
+                  <Table.Row key={app.id} className="group">
+                      <Table.Cell>
+                        {app.job_url ? (
+                          <Link
+                            href={app.job_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            fontWeight="medium"
+                            color="blue.fg"
+                            maxW="full"
+                          >
+                            <Text truncate>{app.role}</Text>
+                            <LuExternalLink size={12} style={{ flexShrink: 0 }} />
+                          </Link>
+                        ) : (
+                          <Box
+                            asChild
+                            w="full"
+                            textAlign="left"
+                            cursor="pointer"
+                            overflow="hidden"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setEditingId(app.id)}
+                            >
+                              <Text fontWeight="medium" truncate>
+                                {app.role}
+                              </Text>
+                            </button>
+                          </Box>
+                        )}
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Box
+                          asChild
+                          w="full"
+                          textAlign="left"
+                          cursor="pointer"
+                          overflow="hidden"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(app.id)}
+                          >
+                            <Text textStyle="sm" color="fg.muted" truncate>
+                              {app.company}
+                            </Text>
+                          </button>
+                        </Box>
+                      </Table.Cell>
+                      <Table.Cell textAlign="center">
+                        <Text textStyle="sm" color="fg.subtle">
+                          {formatDate(app.date_applied)}
                         </Text>
-                      </button>
-                    </Box>
-                    <Flex align="center" gap="3">
-                      <Text textStyle="sm" color="fg.subtle">
-                        {formatDate(app.date_applied)}
-                      </Text>
-                      <Flex
-                        align="center"
-                        gap="1"
-                        opacity="0"
-                        _groupHover={{ opacity: 1 }}
-                      >
-                        <Button
-                          onClick={() => handleSetStatus(app, ApplicationStatus.Offer)}
-                          variant="ghost"
-                          size="xs"
-                          colorPalette="green"
+                      </Table.Cell>
+                      <Table.Cell textAlign="center">
+                        <Text textStyle="sm" color="fg.subtle">
+                          {formatDate(app.deadline)}
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell textAlign="center">
+                        <StatusBadge
+                          status={app.status}
+                          onClick={() => handleSetStatus(app, nextStatus(app.status))}
+                        />
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Flex
+                          align="center"
+                          justify="center"
+                          gap="1"
+                          opacity="0"
+                          _groupHover={{ opacity: 1 }}
                         >
-                          Offer
-                        </Button>
-                        <Button
-                          onClick={() => handleSetStatus(app, ApplicationStatus.Rejected)}
-                          variant="ghost"
-                          size="xs"
-                          colorPalette="red"
-                        >
-                          Rejection
-                        </Button>
-                      </Flex>
-                      <StatusBadge
-                        status={app.status}
-                        onClick={() => handleSetStatus(app, nextStatus(app.status))}
-                      />
-                      <IconButton
-                        onClick={() => handleDelete(app.id)}
-                        aria-label="Delete application"
-                        title="Delete"
-                        variant="ghost"
-                        size="xs"
-                        colorPalette="red"
-                        color="fg.subtle"
-                        opacity="0"
-                        _groupHover={{ opacity: 1 }}
-                        _hover={{ color: "fg.error" }}
-                      >
-                        <LuX />
-                      </IconButton>
-                    </Flex>
-                  </Flex>
-                )
-              )}
-            </Stack>
+                          <IconButton
+                            onClick={() => handleSetStatus(app, ApplicationStatus.Offer)}
+                            aria-label="Mark as Offer"
+                            title="Mark as Offer"
+                            variant="ghost"
+                            size="xs"
+                            colorPalette="green"
+                          >
+                            <LuDollarSign />
+                          </IconButton>
+                          <IconButton
+                            onClick={() => handleSetStatus(app, ApplicationStatus.Rejected)}
+                            aria-label="Mark as Rejected"
+                            title="Mark as Rejected"
+                            variant="ghost"
+                            size="xs"
+                            colorPalette="red"
+                          >
+                            <LuHeartCrack />
+                          </IconButton>
+                          <IconButton
+                            onClick={() => handleDelete(app.id)}
+                            aria-label="Delete application"
+                            title="Delete"
+                            variant="ghost"
+                            size="xs"
+                            colorPalette="red"
+                            color="fg.subtle"
+                            _hover={{ color: "fg.error" }}
+                          >
+                            <LuTrash2 />
+                          </IconButton>
+                        </Flex>
+                      </Table.Cell>
+                    </Table.Row>
+                ))}
+              </Table.Body>
+            </Table.Root>
           </Card.Root>
         )}
       </Container>
