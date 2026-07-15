@@ -101,7 +101,7 @@ export function Dashboard() {
 
   return (
     <Box minH="100vh" bg="bg.subtle" py="8">
-      <Container maxW="3xl">
+      <Container maxW="5xl">
         <Flex justify="space-between" align="center" mb="6">
           <Box>
             <Heading size="xl">Job Applications</Heading>
@@ -174,10 +174,16 @@ export function Dashboard() {
 
         {!isLoading && !error && applications.length > 0 && (
           <Card.Root overflow="hidden">
-            <Table.Root size="sm" tableLayout="fixed">
+            <Table.ScrollArea>
+              <Table.Root
+                size="sm"
+                tableLayout="fixed"
+                minW="800px"
+                css={{ "& td": { paddingBlock: "1" } }}
+              >
               <Table.Header>
                 <Table.Row bg="bg.muted">
-                  <Table.ColumnHeader>Role</Table.ColumnHeader>
+                  <Table.ColumnHeader w="220px">Role</Table.ColumnHeader>
                   <Table.ColumnHeader>Company</Table.ColumnHeader>
                   <Table.ColumnHeader w="110px" textAlign="center">
                     Date Applied
@@ -307,7 +313,8 @@ export function Dashboard() {
                     </Table.Row>
                 ))}
               </Table.Body>
-            </Table.Root>
+              </Table.Root>
+            </Table.ScrollArea>
           </Card.Root>
         )}
       </Container>
