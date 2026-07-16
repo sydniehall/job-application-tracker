@@ -28,7 +28,13 @@ export async function deleteAccount(data: DeleteAccount): Promise<void> {
   await client.delete("/auth/me", { data });
 }
 
-// JWTs are stateless — logout is client-side only.
-export function logout(): void {
+// Revokes the refresh token server-side and clears the httpOnly cookie;
+// best-effort, since the local session must end either way.
+export async function logout(): Promise<void> {
+  try {
+    await client.post("/auth/logout");
+  } catch {
+    // Ignore — server-side revocation is best-effort.
+  }
   token.clear();
 }

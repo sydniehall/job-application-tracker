@@ -27,12 +27,10 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ user: null, isLoading: true });
 
-  // On mount, restore session if a token exists.
+  // On mount, restore the session. Even without a stored access token the
+  // httpOnly refresh cookie may still be valid — the API client refreshes
+  // and retries automatically on 401.
   useEffect(() => {
-    if (!token.get()) {
-      setState({ user: null, isLoading: false });
-      return;
-    }
     getMe()
       .then((user) => setState({ user, isLoading: false }))
       .catch(() => setState({ user: null, isLoading: false }));
@@ -50,13 +48,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
-    apiLogout();
+    void apiLogout(); // fire-and-forget server-side revocation
     setState({ user: null, isLoading: false });
   }
 
   async function deleteAccount(data: DeleteAccount) {
-    await apiDeleteAccount(data);
-    apiLogout();
+    await apiDeleteAccount(data); // cascade revokes refresh tokens server-side
+    token.clear();
     setState({ user: null, isLoading: false });
   }
 

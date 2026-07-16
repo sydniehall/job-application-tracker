@@ -32,6 +32,28 @@ class User(SQLModel, table=True):
         back_populates="owner",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
+    refresh_tokens: List["RefreshToken"] = Relationship(
+        back_populates="user",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+
+
+class RefreshToken(SQLModel, table=True):
+    __tablename__ = "refresh_tokens"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    # Only a SHA-256 hash is stored; the raw token lives in the client cookie.
+    token_hash: str = Field(unique=True, index=True)
+    expires_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+    )
+
+    user: Optional["User"] = Relationship(back_populates="refresh_tokens")
 
 
 class Application(SQLModel, table=True):
