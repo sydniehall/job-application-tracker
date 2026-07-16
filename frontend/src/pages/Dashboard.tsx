@@ -18,7 +18,7 @@ import {
 import {
   LuDollarSign,
   LuExternalLink,
-  LuHeartCrack,
+  LuFlag,
   LuInbox,
   LuInfo,
   LuLogOut,
@@ -286,7 +286,7 @@ export function Dashboard() {
                             size="xs"
                             colorPalette="red"
                           >
-                            <LuHeartCrack />
+                            <LuFlag />
                           </IconButton>
                           <IconButton
                             onClick={() => setViewingId(app.id)}
