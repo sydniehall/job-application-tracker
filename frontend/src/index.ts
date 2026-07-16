@@ -12,6 +12,14 @@ export const ApplicationStatus = {
 
 export type ApplicationStatus = (typeof ApplicationStatus)[keyof typeof ApplicationStatus];
 
+export const ApplicationType = {
+  FullTime: "Full Time",
+  PartTime: "Part Time",
+  Internship: "Internship",
+} as const;
+
+export type ApplicationType = (typeof ApplicationType)[keyof typeof ApplicationType];
+
 export interface UserCreate {
   email: string;
   password: string;
@@ -27,9 +35,12 @@ export interface ApplicationCreate {
   company: string;
   role: string;
   status?: ApplicationStatus;
+  type?: ApplicationType | null;
   date_applied?: string | null;
   deadline?: string | null;
-  job_url?: string | null;
+  url?: string | null;
+  location?: string | null;
+  pay?: string | null;
   notes?: string | null;
   resume_version?: string | null;
 }
@@ -40,9 +51,12 @@ export interface ApplicationRead {
   company: string;
   role: string;
   status: ApplicationStatus;
+  type: ApplicationType | null;
   date_applied: string | null;
   deadline: string | null;
-  job_url: string | null;
+  url: string | null;
+  location: string | null;
+  pay: string | null;
   notes: string | null;
   resume_version: string | null;
   created_at: string | null;
@@ -53,9 +67,12 @@ export interface ApplicationUpdate {
   company?: string | null;
   role?: string | null;
   status?: ApplicationStatus | null;
+  type?: ApplicationType | null;
   date_applied?: string | null;
   deadline?: string | null;
-  job_url?: string | null;
+  url?: string | null;
+  location?: string | null;
+  pay?: string | null;
   notes?: string | null;
   resume_version?: string | null;
 }

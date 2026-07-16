@@ -17,6 +17,12 @@ class ApplicationStatus(str, Enum):
     withdrawn = "Withdrawn"
 
 
+class ApplicationType(str, Enum):
+    full_time = "Full Time"
+    part_time = "Part Time"
+    internship = "Internship"
+
+
 class User(SQLModel, table=True):
     __tablename__ = "users"
 
@@ -64,12 +70,16 @@ class Application(SQLModel, table=True):
     company: str
     role: str
     status: ApplicationStatus = Field(default=ApplicationStatus.applied)
+    type: Optional[ApplicationType] = None
     date_applied: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True)
     )
     deadline: Optional[date] = None
-    job_url: Optional[str] = None
+    url: Optional[str] = None
+    location: Optional[str] = None
+    # Free-form so it can hold ranges and units ("$25/hr", "$110k–$130k").
+    pay: Optional[str] = None
     notes: Optional[str] = Field(
         default=None,
         sa_column=Column(Text, nullable=True)
@@ -102,9 +112,12 @@ class ApplicationCreate(SQLModel):
     company: str
     role: str
     status: ApplicationStatus = ApplicationStatus.applied
+    type: Optional[ApplicationType] = None
     date_applied: Optional[datetime] = None
     deadline: Optional[date] = None
-    job_url: Optional[str] = None
+    url: Optional[str] = None
+    location: Optional[str] = None
+    pay: Optional[str] = None
     notes: Optional[str] = None
     resume_version: Optional[str] = None
 
@@ -115,9 +128,12 @@ class ApplicationRead(SQLModel):
     company: str
     role: str
     status: ApplicationStatus
+    type: Optional[ApplicationType]
     date_applied: Optional[datetime]
     deadline: Optional[date]
-    job_url: Optional[str]
+    url: Optional[str]
+    location: Optional[str]
+    pay: Optional[str]
     notes: Optional[str]
     resume_version: Optional[str]
     created_at: Optional[datetime]
@@ -128,9 +144,12 @@ class ApplicationUpdate(SQLModel):
     company: Optional[str] = None
     role: Optional[str] = None
     status: Optional[ApplicationStatus] = None
+    type: Optional[ApplicationType] = None
     date_applied: Optional[datetime] = None
     deadline: Optional[date] = None
-    job_url: Optional[str] = None
+    url: Optional[str] = None
+    location: Optional[str] = None
+    pay: Optional[str] = None
     notes: Optional[str] = None
     resume_version: Optional[str] = None
 

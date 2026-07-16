@@ -66,23 +66,41 @@ export function ApplicationDetails({
                   <DataList.ItemValue>{application.company}</DataList.ItemValue>
                 </DataList.Item>
                 <DataList.Item>
+                  <DataList.ItemLabel>Location</DataList.ItemLabel>
+                  <DataList.ItemValue>
+                    {application.location || "—"}
+                  </DataList.ItemValue>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.ItemLabel>Pay</DataList.ItemLabel>
+                  <DataList.ItemValue>
+                    {application.pay || "—"}
+                  </DataList.ItemValue>
+                </DataList.Item>
+                <DataList.Item>
+                  <DataList.ItemLabel>Type</DataList.ItemLabel>
+                  <DataList.ItemValue>
+                    {application.type || "—"}
+                  </DataList.ItemValue>
+                </DataList.Item>
+                <DataList.Item>
                   <DataList.ItemLabel>Status</DataList.ItemLabel>
                   <DataList.ItemValue>
                     <StatusBadge status={application.status} />
                   </DataList.ItemValue>
                 </DataList.Item>
                 <DataList.Item>
-                  <DataList.ItemLabel>Job URL</DataList.ItemLabel>
+                  <DataList.ItemLabel>URL</DataList.ItemLabel>
                   <DataList.ItemValue>
-                    {application.job_url ? (
+                    {application.url ? (
                       <Link
-                        href={application.job_url}
+                        href={application.url}
                         target="_blank"
                         rel="noopener noreferrer"
                         color="blue.fg"
                         wordBreak="break-all"
                       >
-                        {application.job_url}
+                        {application.url}
                         <LuExternalLink size={12} style={{ flexShrink: 0 }} />
                       </Link>
                     ) : (

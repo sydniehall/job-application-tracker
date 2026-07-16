@@ -18,6 +18,8 @@ import {
 import {
   LuDollarSign,
   LuExternalLink,
+  LuFilePlus,
+  LuFileText,
   LuFlag,
   LuInbox,
   LuInfo,
@@ -35,6 +37,7 @@ import {
 import { StatusBadge } from "../components/StatusBadge";
 import { ApplicationForm } from "../components/ApplicationForm";
 import { ApplicationDetails } from "../components/ApplicationDetails";
+import { NoteDialog } from "../components/NoteDialog";
 import { ApplicationStatus } from "../index";
 import type { ApplicationRead } from "../index";
 
@@ -70,9 +73,11 @@ export function Dashboard() {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [viewingId, setViewingId] = useState<number | null>(null);
+  const [noteId, setNoteId] = useState<number | null>(null);
 
   const editingApp = applications.find((a) => a.id === editingId);
   const viewingApp = applications.find((a) => a.id === viewingId);
+  const noteApp = applications.find((a) => a.id === noteId);
 
   useEffect(() => {
     getApplications()
@@ -106,10 +111,10 @@ export function Dashboard() {
 
   return (
     <Box minH="100vh" bg="bg.subtle" py="8">
-      <Container maxW="5xl">
+      <Container maxW="7xl">
         <Flex justify="space-between" align="center" mb="6">
           <Box>
-            <Heading size="xl">Your Applications</Heading>
+            <Heading size="xl">Applications</Heading>
             <Text textStyle="sm" color="fg.muted">
               {user?.email} · {applications.length} application
               {applications.length === 1 ? "" : "s"}
@@ -148,6 +153,7 @@ export function Dashboard() {
             submitLabel="Save"
             onSubmit={(data) => handleEdit(editingApp.id, data)}
             onCancel={() => setEditingId(null)}
+            onDelete={() => handleDelete(editingApp.id)}
           />
         )}
 
@@ -155,6 +161,14 @@ export function Dashboard() {
           <ApplicationDetails
             application={viewingApp}
             onClose={() => setViewingId(null)}
+          />
+        )}
+
+        {noteApp && (
+          <NoteDialog
+            application={noteApp}
+            onSave={(notes) => handleEdit(noteApp.id, { notes })}
+            onClose={() => setNoteId(null)}
           />
         )}
 
@@ -190,17 +204,24 @@ export function Dashboard() {
               <Table.Root
                 size="sm"
                 tableLayout="fixed"
-                minW="800px"
-                css={{ "& td": { paddingBlock: "1" } }}
+                minW="1100px"
+                css={{
+                  "& td": { paddingBlock: "1" },
+                  "& th": { paddingBlock: "1.5" },
+                }}
               >
               <Table.Header>
                 <Table.Row bg="bg.muted">
-                  <Table.ColumnHeader w="220px">Role</Table.ColumnHeader>
-                  <Table.ColumnHeader>Company</Table.ColumnHeader>
-                  <Table.ColumnHeader w="110px">Date Applied</Table.ColumnHeader>
-                  <Table.ColumnHeader w="110px">Deadline</Table.ColumnHeader>
+                  <Table.ColumnHeader w="200px">Role</Table.ColumnHeader>
+                  <Table.ColumnHeader w="100px">Company</Table.ColumnHeader>
+                  <Table.ColumnHeader w="100px">Location</Table.ColumnHeader>
+                  <Table.ColumnHeader w="70px">Type</Table.ColumnHeader>
+                  <Table.ColumnHeader w="70px">Pay</Table.ColumnHeader>
+                  <Table.ColumnHeader w="100px">Date Applied</Table.ColumnHeader>
+                  <Table.ColumnHeader w="100px">Deadline</Table.ColumnHeader>
                   <Table.ColumnHeader w="105px">Status</Table.ColumnHeader>
-                  <Table.ColumnHeader w="145px">Actions</Table.ColumnHeader>
+                  <Table.ColumnHeader w="60px">Notes</Table.ColumnHeader>
+                  <Table.ColumnHeader w="110px">Actions</Table.ColumnHeader>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
@@ -213,9 +234,9 @@ export function Dashboard() {
                       _hover={{ bg: "bg.subtle" }}
                     >
                       <Table.Cell>
-                        {app.job_url ? (
+                        {app.url ? (
                           <Link
-                            href={app.job_url}
+                            href={app.url}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
@@ -235,6 +256,21 @@ export function Dashboard() {
                       <Table.Cell>
                         <Text textStyle="sm" color="fg.muted" truncate>
                           {app.company}
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Text textStyle="sm" color="fg.muted" truncate>
+                          {app.location || "—"}
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Text textStyle="sm" color="fg.muted" truncate>
+                          {app.type || "—"}
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Text textStyle="sm" color="fg.muted" truncate>
+                          {app.pay || "—"}
                         </Text>
                       </Table.Cell>
                       <Table.Cell textAlign="center">
@@ -258,6 +294,39 @@ export function Dashboard() {
                         />
                       </Table.Cell>
                       <Table.Cell
+                        textAlign="center"
+                        onClick={(e) => e.stopPropagation()}
+                        cursor="default"
+                      >
+                        {app.notes ? (
+                          <IconButton
+                            onClick={() => setNoteId(app.id)}
+                            aria-label="View note"
+                            title="View note"
+                            variant="ghost"
+                            size="2xs"
+                            color="fg.subtle"
+                            _hover={{ color: "fg" }}
+                          >
+                            <LuFileText />
+                          </IconButton>
+                        ) : (
+                          <IconButton
+                            onClick={() => setNoteId(app.id)}
+                            aria-label="Add note"
+                            title="Add note"
+                            variant="ghost"
+                            size="2xs"
+                            color="fg.subtle"
+                            opacity="0"
+                            _groupHover={{ opacity: 1 }}
+                            _hover={{ color: "fg" }}
+                          >
+                            <LuFilePlus />
+                          </IconButton>
+                        )}
+                      </Table.Cell>
+                      <Table.Cell
                         onClick={(e) => e.stopPropagation()}
                         cursor="default"
                       >
@@ -273,7 +342,7 @@ export function Dashboard() {
                             aria-label="Mark as Offer"
                             title="Mark as Offer"
                             variant="ghost"
-                            size="xs"
+                            size="2xs"
                             colorPalette="green"
                           >
                             <LuDollarSign />
@@ -283,7 +352,7 @@ export function Dashboard() {
                             aria-label="Mark as Rejected"
                             title="Mark as Rejected"
                             variant="ghost"
-                            size="xs"
+                            size="2xs"
                             colorPalette="red"
                           >
                             <LuFlag />
@@ -293,7 +362,7 @@ export function Dashboard() {
                             aria-label="View details"
                             title="View details"
                             variant="ghost"
-                            size="xs"
+                            size="2xs"
                             color="fg.subtle"
                             _hover={{ color: "fg" }}
                           >
@@ -304,7 +373,7 @@ export function Dashboard() {
                             aria-label="Delete application"
                             title="Delete"
                             variant="ghost"
-                            size="xs"
+                            size="2xs"
                             colorPalette="red"
                             color="fg.subtle"
                             _hover={{ color: "fg.error" }}

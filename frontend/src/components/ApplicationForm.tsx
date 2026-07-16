@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import type { SubmitEvent } from "react";
 import {
@@ -7,12 +8,15 @@ import {
   Dialog,
   Field,
   Flex,
+  IconButton,
   Input,
   NativeSelect,
   Portal,
   Stack,
+  Textarea,
 } from "@chakra-ui/react";
-import { ApplicationStatus } from "../index";
+import { LuTrash2 } from "react-icons/lu";
+import { ApplicationStatus, ApplicationType } from "../index";
 import type { ApplicationCreate } from "../index";
 
 interface ApplicationFormProps {
@@ -21,6 +25,7 @@ interface ApplicationFormProps {
   submitLabel: string;
   onSubmit: (data: ApplicationCreate) => Promise<void>;
   onCancel: () => void;
+  onDelete?: () => void;
 }
 
 // Local date as YYYY-MM-DD (toISOString would give the UTC date, which is
@@ -35,17 +40,22 @@ export function ApplicationForm({
   submitLabel,
   onSubmit,
   onCancel,
+  onDelete,
 }: ApplicationFormProps) {
-  const [jobUrl, setJobUrl] = useState(initial?.job_url ?? "");
+  const [url, setUrl] = useState(initial?.url ?? "");
   const [company, setCompany] = useState(initial?.company ?? "");
   const [role, setRole] = useState(initial?.role ?? "");
+  const [location, setLocation] = useState(initial?.location ?? "");
+  const [pay, setPay] = useState(initial?.pay ?? "");
   const [status, setStatus] = useState<ApplicationStatus>(
     initial?.status ?? ApplicationStatus.Applied
   );
+  const [type, setType] = useState<ApplicationType | "">(initial?.type ?? "");
   const [dateApplied, setDateApplied] = useState(
     () => initial?.date_applied?.split("T")[0] ?? localToday()
   );
   const [deadline, setDeadline] = useState(initial?.deadline ?? "");
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   // Safari shows today's date as placeholder text in an empty date input, which
   // reads as a pre-filled value. Hide the text while empty and unfocused.
   const [deadlineFocused, setDeadlineFocused] = useState(false);
@@ -61,12 +71,16 @@ export function ApplicationForm({
     try {
       const time = new Date().toTimeString().slice(0, 8);
       await onSubmit({
-        job_url: jobUrl || null,
+        url: url || null,
         company,
         role,
+        location: location || null,
+        pay: pay || null,
         status,
+        type: type || null,
         date_applied: isToApply || !dateApplied ? null : `${dateApplied}T${time}`,
         deadline: deadline || null,
+        notes: notes.trim() || null,
       });
     } catch {
       setError("Could not save application.");
@@ -93,12 +107,12 @@ export function ApplicationForm({
                   </Alert.Root>
                 )}
                 <Field.Root>
-                  <Field.Label>Job URL</Field.Label>
+                  <Field.Label>URL</Field.Label>
                   <Input
                     type="url"
                     placeholder="https://..."
-                    value={jobUrl}
-                    onChange={(e) => setJobUrl(e.target.value)}
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
                     autoFocus
                   />
                 </Field.Root>
@@ -122,24 +136,63 @@ export function ApplicationForm({
                     />
                   </Field.Root>
                 </Flex>
-                <Field.Root>
-                  <Field.Label>Status</Field.Label>
-                  <NativeSelect.Root>
-                    <NativeSelect.Field
-                      value={status}
-                      onChange={(e) =>
-                        setStatus(e.target.value as ApplicationStatus)
-                      }
-                    >
-                      {Object.values(ApplicationStatus).map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </NativeSelect.Field>
-                    <NativeSelect.Indicator />
-                  </NativeSelect.Root>
-                </Field.Root>
+                <Flex gap="4">
+                  <Field.Root flex="1">
+                    <Field.Label>Location</Field.Label>
+                    <Input
+                      placeholder="e.g. Austin, TX / Remote"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                    />
+                  </Field.Root>
+                  <Field.Root flex="1">
+                    <Field.Label>Pay</Field.Label>
+                    <Input
+                      placeholder="e.g. $25/hr or $110k"
+                      value={pay}
+                      onChange={(e) => setPay(e.target.value)}
+                    />
+                  </Field.Root>
+                </Flex>
+                <Flex gap="4">
+                  <Field.Root flex="1">
+                    <Field.Label>Status</Field.Label>
+                    <NativeSelect.Root>
+                      <NativeSelect.Field
+                        value={status}
+                        onChange={(e) =>
+                          setStatus(e.target.value as ApplicationStatus)
+                        }
+                      >
+                        {Object.values(ApplicationStatus).map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </NativeSelect.Field>
+                      <NativeSelect.Indicator />
+                    </NativeSelect.Root>
+                  </Field.Root>
+                  <Field.Root flex="1">
+                    <Field.Label>Type</Field.Label>
+                    <NativeSelect.Root>
+                      <NativeSelect.Field
+                        value={type}
+                        onChange={(e) =>
+                          setType(e.target.value as ApplicationType | "")
+                        }
+                      >
+                        <option value="">—</option>
+                        {Object.values(ApplicationType).map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </NativeSelect.Field>
+                      <NativeSelect.Indicator />
+                    </NativeSelect.Root>
+                  </Field.Root>
+                </Flex>
                 <Flex gap="4">
                   <Field.Root flex="1" disabled={isToApply}>
                     <Field.Label>Applied Date</Field.Label>
@@ -170,9 +223,30 @@ export function ApplicationForm({
                     />
                   </Field.Root>
                 </Flex>
+                <Field.Root>
+                  <Field.Label>Notes</Field.Label>
+                  <Textarea
+                    rows={3}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                </Field.Root>
               </Stack>
             </Dialog.Body>
             <Dialog.Footer>
+              {onDelete && (
+                <IconButton
+                  type="button"
+                  onClick={onDelete}
+                  aria-label="Delete application"
+                  title="Delete application"
+                  colorPalette="red"
+                  variant="ghost"
+                  mr="auto"
+                >
+                  <LuTrash2 />
+                </IconButton>
+              )}
               <Button type="button" onClick={onCancel} variant="ghost">
                 Cancel
               </Button>
