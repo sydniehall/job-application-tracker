@@ -20,6 +20,7 @@ import {
   LuExternalLink,
   LuHeartCrack,
   LuInbox,
+  LuInfo,
   LuLogOut,
   LuPlus,
   LuTrash2,
@@ -33,6 +34,7 @@ import {
 } from "../api/applications";
 import { StatusBadge } from "../components/StatusBadge";
 import { ApplicationForm } from "../components/ApplicationForm";
+import { ApplicationDetails } from "../components/ApplicationDetails";
 import { ApplicationStatus } from "../index";
 import type { ApplicationRead } from "../index";
 
@@ -40,6 +42,7 @@ const STATUS_CYCLE: ApplicationStatus[] = [
   ApplicationStatus.Applied,
   ApplicationStatus.Screening,
   ApplicationStatus.Interview,
+  ApplicationStatus.Withdrawn,
   ApplicationStatus.ToApply,
 ];
 
@@ -66,8 +69,10 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [viewingId, setViewingId] = useState<number | null>(null);
 
   const editingApp = applications.find((a) => a.id === editingId);
+  const viewingApp = applications.find((a) => a.id === viewingId);
 
   useEffect(() => {
     getApplications()
@@ -104,7 +109,7 @@ export function Dashboard() {
       <Container maxW="5xl">
         <Flex justify="space-between" align="center" mb="6">
           <Box>
-            <Heading size="xl">Job Applications</Heading>
+            <Heading size="xl">Your Applications</Heading>
             <Text textStyle="sm" color="fg.muted">
               {user?.email} · {applications.length} application
               {applications.length === 1 ? "" : "s"}
@@ -143,6 +148,13 @@ export function Dashboard() {
             submitLabel="Save"
             onSubmit={(data) => handleEdit(editingApp.id, data)}
             onCancel={() => setEditingId(null)}
+          />
+        )}
+
+        {viewingApp && (
+          <ApplicationDetails
+            application={viewingApp}
+            onClose={() => setViewingId(null)}
           />
         )}
 
@@ -185,72 +197,45 @@ export function Dashboard() {
                 <Table.Row bg="bg.muted">
                   <Table.ColumnHeader w="220px">Role</Table.ColumnHeader>
                   <Table.ColumnHeader>Company</Table.ColumnHeader>
-                  <Table.ColumnHeader w="110px" textAlign="center">
-                    Date Applied
-                  </Table.ColumnHeader>
-                  <Table.ColumnHeader w="110px" textAlign="center">
-                    Deadline
-                  </Table.ColumnHeader>
-                  <Table.ColumnHeader w="105px" textAlign="center">
-                    Status
-                  </Table.ColumnHeader>
-                  <Table.ColumnHeader w="110px" textAlign="center">
-                    Actions
-                  </Table.ColumnHeader>
+                  <Table.ColumnHeader w="110px">Date Applied</Table.ColumnHeader>
+                  <Table.ColumnHeader w="110px">Deadline</Table.ColumnHeader>
+                  <Table.ColumnHeader w="105px">Status</Table.ColumnHeader>
+                  <Table.ColumnHeader w="145px">Actions</Table.ColumnHeader>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
                 {applications.map((app) => (
-                  <Table.Row key={app.id} className="group">
+                  <Table.Row
+                      key={app.id}
+                      className="group"
+                      onClick={() => setEditingId(app.id)}
+                      cursor="pointer"
+                      _hover={{ bg: "bg.subtle" }}
+                    >
                       <Table.Cell>
                         {app.job_url ? (
                           <Link
                             href={app.job_url}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
                             fontWeight="medium"
-                            color="blue.fg"
+                            color="fg"
                             maxW="full"
                           >
                             <Text truncate>{app.role}</Text>
                             <LuExternalLink size={12} style={{ flexShrink: 0 }} />
                           </Link>
                         ) : (
-                          <Box
-                            asChild
-                            w="full"
-                            textAlign="left"
-                            cursor="pointer"
-                            overflow="hidden"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => setEditingId(app.id)}
-                            >
-                              <Text fontWeight="medium" truncate>
-                                {app.role}
-                              </Text>
-                            </button>
-                          </Box>
+                          <Text fontWeight="medium" truncate>
+                            {app.role}
+                          </Text>
                         )}
                       </Table.Cell>
                       <Table.Cell>
-                        <Box
-                          asChild
-                          w="full"
-                          textAlign="left"
-                          cursor="pointer"
-                          overflow="hidden"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setEditingId(app.id)}
-                          >
-                            <Text textStyle="sm" color="fg.muted" truncate>
-                              {app.company}
-                            </Text>
-                          </button>
-                        </Box>
+                        <Text textStyle="sm" color="fg.muted" truncate>
+                          {app.company}
+                        </Text>
                       </Table.Cell>
                       <Table.Cell textAlign="center">
                         <Text textStyle="sm" color="fg.subtle">
@@ -262,17 +247,24 @@ export function Dashboard() {
                           {formatDate(app.deadline)}
                         </Text>
                       </Table.Cell>
-                      <Table.Cell textAlign="center">
+                      <Table.Cell
+                        textAlign="center"
+                        onClick={(e) => e.stopPropagation()}
+                        cursor="default"
+                      >
                         <StatusBadge
                           status={app.status}
                           onClick={() => handleSetStatus(app, nextStatus(app.status))}
                         />
                       </Table.Cell>
-                      <Table.Cell>
+                      <Table.Cell
+                        onClick={(e) => e.stopPropagation()}
+                        cursor="default"
+                      >
                         <Flex
                           align="center"
                           justify="center"
-                          gap="1"
+                          gap="0"
                           opacity="0"
                           _groupHover={{ opacity: 1 }}
                         >
@@ -295,6 +287,17 @@ export function Dashboard() {
                             colorPalette="red"
                           >
                             <LuHeartCrack />
+                          </IconButton>
+                          <IconButton
+                            onClick={() => setViewingId(app.id)}
+                            aria-label="View details"
+                            title="View details"
+                            variant="ghost"
+                            size="xs"
+                            color="fg.subtle"
+                            _hover={{ color: "fg" }}
+                          >
+                            <LuInfo />
                           </IconButton>
                           <IconButton
                             onClick={() => handleDelete(app.id)}
