@@ -79,6 +79,15 @@ export function Dashboard() {
   const viewingApp = applications.find((a) => a.id === viewingId);
   const noteApp = applications.find((a) => a.id === noteId);
 
+  // Distinct existing values, offered as autocomplete suggestions in the form.
+  const suggestions = {
+    companies: [...new Set(applications.map((a) => a.company))].sort(),
+    roles: [...new Set(applications.map((a) => a.role))].sort(),
+    locations: [
+      ...new Set(applications.flatMap((a) => (a.location ? [a.location] : []))),
+    ].sort(),
+  };
+
   useEffect(() => {
     getApplications()
       .then(setApplications)
@@ -143,6 +152,7 @@ export function Dashboard() {
             submitLabel="Add"
             onSubmit={handleAdd}
             onCancel={() => setIsAdding(false)}
+            suggestions={suggestions}
           />
         )}
 
@@ -154,6 +164,7 @@ export function Dashboard() {
             onSubmit={(data) => handleEdit(editingApp.id, data)}
             onCancel={() => setEditingId(null)}
             onDelete={() => handleDelete(editingApp.id)}
+            suggestions={suggestions}
           />
         )}
 
@@ -167,7 +178,7 @@ export function Dashboard() {
         {noteApp && (
           <NoteDialog
             application={noteApp}
-            onSave={(notes) => handleEdit(noteApp.id, { notes })}
+            onSave={(notes) => handleEdit(noteApp.id, { notes: notes || null })}
             onClose={() => setNoteId(null)}
           />
         )}
@@ -208,19 +219,29 @@ export function Dashboard() {
                 css={{
                   "& td": { paddingBlock: "1" },
                   "& th": { paddingBlock: "1.5" },
+                  // Freeze the Actions column to the right edge during
+                  // horizontal scroll; cells inherit the row background so
+                  // hover still works.
+                  "& th:last-of-type, & td:last-of-type": {
+                    position: "sticky",
+                    right: 0,
+                    zIndex: 1,
+                    background: "inherit",
+                    boxShadow: "inset 1px 0 0 var(--chakra-colors-border)",
+                  },
                 }}
               >
               <Table.Header>
                 <Table.Row bg="bg.muted">
-                  <Table.ColumnHeader w="200px">Role</Table.ColumnHeader>
-                  <Table.ColumnHeader w="100px">Company</Table.ColumnHeader>
+                  <Table.ColumnHeader>Role</Table.ColumnHeader>
+                  <Table.ColumnHeader w="150px">Company</Table.ColumnHeader>
                   <Table.ColumnHeader w="100px">Location</Table.ColumnHeader>
-                  <Table.ColumnHeader w="70px">Type</Table.ColumnHeader>
-                  <Table.ColumnHeader w="70px">Pay</Table.ColumnHeader>
+                  <Table.ColumnHeader w="90px">Type</Table.ColumnHeader>
+                  <Table.ColumnHeader w="100px">Pay</Table.ColumnHeader>
                   <Table.ColumnHeader w="100px">Date Applied</Table.ColumnHeader>
                   <Table.ColumnHeader w="100px">Deadline</Table.ColumnHeader>
-                  <Table.ColumnHeader w="105px">Status</Table.ColumnHeader>
-                  <Table.ColumnHeader w="60px">Notes</Table.ColumnHeader>
+                  <Table.ColumnHeader w="85px">Status</Table.ColumnHeader>
+                  <Table.ColumnHeader w="70px">Notes</Table.ColumnHeader>
                   <Table.ColumnHeader w="110px">Actions</Table.ColumnHeader>
                 </Table.Row>
               </Table.Header>
@@ -231,6 +252,7 @@ export function Dashboard() {
                       className="group"
                       onClick={() => setEditingId(app.id)}
                       cursor="pointer"
+                      bg="bg.panel"
                       _hover={{ bg: "bg.subtle" }}
                     >
                       <Table.Cell>

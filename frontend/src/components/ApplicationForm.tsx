@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { SubmitEvent } from "react";
 import {
   Alert,
@@ -19,6 +19,12 @@ import { LuTrash2 } from "react-icons/lu";
 import { ApplicationStatus, ApplicationType } from "../index";
 import type { ApplicationCreate } from "../index";
 
+interface FieldSuggestions {
+  companies: string[];
+  roles: string[];
+  locations: string[];
+}
+
 interface ApplicationFormProps {
   title: string;
   initial?: Partial<ApplicationCreate>;
@@ -26,6 +32,7 @@ interface ApplicationFormProps {
   onSubmit: (data: ApplicationCreate) => Promise<void>;
   onCancel: () => void;
   onDelete?: () => void;
+  suggestions?: FieldSuggestions;
 }
 
 // Local date as YYYY-MM-DD (toISOString would give the UTC date, which is
@@ -41,6 +48,7 @@ export function ApplicationForm({
   onSubmit,
   onCancel,
   onDelete,
+  suggestions,
 }: ApplicationFormProps) {
   const [url, setUrl] = useState(initial?.url ?? "");
   const [company, setCompany] = useState(initial?.company ?? "");
@@ -63,6 +71,7 @@ export function ApplicationForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isToApply = status === ApplicationStatus.ToApply;
+  const companyRef = useRef<HTMLInputElement>(null);
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
@@ -90,7 +99,11 @@ export function ApplicationForm({
   }
 
   return (
-    <Dialog.Root open onOpenChange={(e) => !e.open && onCancel()}>
+    <Dialog.Root
+      open
+      onOpenChange={(e) => !e.open && onCancel()}
+      initialFocusEl={() => companyRef.current}
+    >
       <Portal>
         <Dialog.Backdrop />
         <Dialog.Positioner>
@@ -113,7 +126,6 @@ export function ApplicationForm({
                     placeholder="https://..."
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
-                    autoFocus
                   />
                 </Field.Root>
                 <Flex gap="4">
@@ -122,9 +134,16 @@ export function ApplicationForm({
                       Company <Field.RequiredIndicator />
                     </Field.Label>
                     <Input
+                      ref={companyRef}
                       value={company}
                       onChange={(e) => setCompany(e.target.value)}
+                      list="company-suggestions"
                     />
+                    <datalist id="company-suggestions">
+                      {suggestions?.companies.map((c) => (
+                        <option key={c} value={c} />
+                      ))}
+                    </datalist>
                   </Field.Root>
                   <Field.Root required flex="1">
                     <Field.Label>
@@ -133,7 +152,13 @@ export function ApplicationForm({
                     <Input
                       value={role}
                       onChange={(e) => setRole(e.target.value)}
+                      list="role-suggestions"
                     />
+                    <datalist id="role-suggestions">
+                      {suggestions?.roles.map((r) => (
+                        <option key={r} value={r} />
+                      ))}
+                    </datalist>
                   </Field.Root>
                 </Flex>
                 <Flex gap="4">
@@ -143,7 +168,13 @@ export function ApplicationForm({
                       placeholder="e.g. Austin, TX / Remote"
                       value={location}
                       onChange={(e) => setLocation(e.target.value)}
+                      list="location-suggestions"
                     />
+                    <datalist id="location-suggestions">
+                      {suggestions?.locations.map((l) => (
+                        <option key={l} value={l} />
+                      ))}
+                    </datalist>
                   </Field.Root>
                   <Field.Root flex="1">
                     <Field.Label>Pay</Field.Label>
@@ -151,6 +182,13 @@ export function ApplicationForm({
                       placeholder="e.g. $25/hr or $110k"
                       value={pay}
                       onChange={(e) => setPay(e.target.value)}
+                      // Start with "$" on focus; drop it again if left alone.
+                      onFocus={() => {
+                        if (!pay) setPay("$");
+                      }}
+                      onBlur={() => {
+                        if (pay === "$") setPay("");
+                      }}
                     />
                   </Field.Root>
                 </Flex>
@@ -201,6 +239,16 @@ export function ApplicationForm({
                       value={isToApply ? "" : dateApplied ?? ""}
                       onChange={(e) => setDateApplied(e.target.value)}
                       disabled={isToApply}
+                      css={
+                        isToApply
+                          ? {
+                              color: "transparent",
+                              "&::-webkit-datetime-edit": {
+                                color: "transparent",
+                              },
+                            }
+                          : undefined
+                      }
                     />
                   </Field.Root>
                   <Field.Root flex="1">
@@ -211,9 +259,13 @@ export function ApplicationForm({
                       onChange={(e) => setDeadline(e.target.value)}
                       onFocus={() => setDeadlineFocused(true)}
                       onBlur={() => setDeadlineFocused(false)}
+                      // Chrome exposes the ghost text via the datetime-edit
+                      // pseudo-element; desktop Safari doesn't, so also make
+                      // the input's own text transparent.
                       css={
                         !deadline && !deadlineFocused
                           ? {
+                              color: "transparent",
                               "&::-webkit-datetime-edit": {
                                 color: "transparent",
                               },

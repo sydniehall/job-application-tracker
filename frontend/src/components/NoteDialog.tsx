@@ -91,7 +91,7 @@ export function NoteDialog({ application, onSave, onClose }: NoteDialogProps) {
                     colorPalette="blue"
                     onClick={handleSave}
                     loading={isSaving}
-                    disabled={!text.trim()}
+                    disabled={isAdding && !text.trim()}
                   >
                     Save
                   </Button>
