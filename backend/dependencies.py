@@ -61,6 +61,7 @@ def _as_utc(dt: datetime) -> datetime:
 
 def issue_refresh_token(user: User, db: Session) -> str:
     """Create a refresh token row and return the raw token for the cookie."""
+    assert user.id is not None  # user is always a persisted row here
     raw = secrets.token_urlsafe(48)
     db.add(RefreshToken(
         user_id=user.id,
@@ -115,8 +116,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
+        email = payload.get("sub")
+        if not isinstance(email, str):
             raise credentials_exc
         token_data = TokenData(email=email.strip().lower())
     except JWTError:
