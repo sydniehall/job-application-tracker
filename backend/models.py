@@ -68,7 +68,7 @@ class Application(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id")
     company: str
-    role: str
+    title: str
     status: ApplicationStatus = Field(default=ApplicationStatus.applied)
     type: Optional[ApplicationType] = None
     date_applied: Optional[datetime] = Field(
@@ -110,7 +110,7 @@ class UserRead(SQLModel):
 
 class ApplicationCreate(SQLModel):
     company: str
-    role: str
+    title: str
     status: ApplicationStatus = ApplicationStatus.applied
     type: Optional[ApplicationType] = None
     date_applied: Optional[datetime] = None
@@ -126,7 +126,7 @@ class ApplicationRead(SQLModel):
     id: int
     user_id: int
     company: str
-    role: str
+    title: str
     status: ApplicationStatus
     type: Optional[ApplicationType]
     date_applied: Optional[datetime]
@@ -142,7 +142,7 @@ class ApplicationRead(SQLModel):
 
 class ApplicationUpdate(SQLModel):
     company: Optional[str] = None
-    role: Optional[str] = None
+    title: Optional[str] = None
     status: Optional[ApplicationStatus] = None
     type: Optional[ApplicationType] = None
     date_applied: Optional[datetime] = None

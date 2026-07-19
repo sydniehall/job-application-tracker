@@ -58,8 +58,8 @@ export function ApplicationDetails({
             <Dialog.Body>
               <DataList.Root orientation="horizontal">
                 <DataList.Item>
-                  <DataList.ItemLabel>Role</DataList.ItemLabel>
-                  <DataList.ItemValue>{application.role}</DataList.ItemValue>
+                  <DataList.ItemLabel>Title</DataList.ItemLabel>
+                  <DataList.ItemValue>{application.title}</DataList.ItemValue>
                 </DataList.Item>
                 <DataList.Item>
                   <DataList.ItemLabel>Company</DataList.ItemLabel>

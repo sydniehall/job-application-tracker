@@ -21,7 +21,7 @@ import type { ApplicationCreate } from "../index";
 
 interface FieldSuggestions {
   companies: string[];
-  roles: string[];
+  titles: string[];
   locations: string[];
 }
 
@@ -52,7 +52,7 @@ export function ApplicationForm({
 }: ApplicationFormProps) {
   const [url, setUrl] = useState(initial?.url ?? "");
   const [company, setCompany] = useState(initial?.company ?? "");
-  const [role, setRole] = useState(initial?.role ?? "");
+  const [jobTitle, setJobTitle] = useState(initial?.title ?? "");
   const [location, setLocation] = useState(initial?.location ?? "");
   const [pay, setPay] = useState(initial?.pay ?? "");
   const [status, setStatus] = useState<ApplicationStatus>(
@@ -82,7 +82,7 @@ export function ApplicationForm({
       await onSubmit({
         url: url || null,
         company,
-        role,
+        title: jobTitle,
         location: location || null,
         pay: pay || null,
         status,
@@ -147,16 +147,16 @@ export function ApplicationForm({
                   </Field.Root>
                   <Field.Root required flex="1">
                     <Field.Label>
-                      Role <Field.RequiredIndicator />
+                      Title <Field.RequiredIndicator />
                     </Field.Label>
                     <Input
-                      value={role}
-                      onChange={(e) => setRole(e.target.value)}
-                      list="role-suggestions"
+                      value={jobTitle}
+                      onChange={(e) => setJobTitle(e.target.value)}
+                      list="title-suggestions"
                     />
-                    <datalist id="role-suggestions">
-                      {suggestions?.roles.map((r) => (
-                        <option key={r} value={r} />
+                    <datalist id="title-suggestions">
+                      {suggestions?.titles.map((t) => (
+                        <option key={t} value={t} />
                       ))}
                     </datalist>
                   </Field.Root>

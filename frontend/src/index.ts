@@ -33,7 +33,7 @@ export interface UserRead {
 
 export interface ApplicationCreate {
   company: string;
-  role: string;
+  title: string;
   status?: ApplicationStatus;
   type?: ApplicationType | null;
   date_applied?: string | null;
@@ -49,7 +49,7 @@ export interface ApplicationRead {
   id: number;
   user_id: number;
   company: string;
-  role: string;
+  title: string;
   status: ApplicationStatus;
   type: ApplicationType | null;
   date_applied: string | null;
@@ -65,7 +65,7 @@ export interface ApplicationRead {
 
 export interface ApplicationUpdate {
   company?: string | null;
-  role?: string | null;
+  title?: string | null;
   status?: ApplicationStatus | null;
   type?: ApplicationType | null;
   date_applied?: string | null;
