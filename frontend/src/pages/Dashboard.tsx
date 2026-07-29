@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -10,22 +10,32 @@ import {
   Flex,
   Heading,
   IconButton,
+  Input,
   Link,
+  Menu,
+  Popover,
+  Portal,
   Spinner,
   Table,
   Text,
 } from "@chakra-ui/react";
 import {
+  LuArrowDown,
+  LuArrowUp,
+  LuArrowUpDown,
+  LuBan,
+  LuCheck,
+  LuChevronDown,
   LuDollarSign,
   LuExternalLink,
-  LuFilePlus,
-  LuFileText,
-  LuFlag,
   LuInbox,
   LuInfo,
   LuLogOut,
   LuPlus,
+  LuSearch,
+  LuSearchX,
   LuTrash2,
+  LuX,
 } from "react-icons/lu";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -38,7 +48,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { ApplicationForm } from "../components/ApplicationForm";
 import { ApplicationDetails } from "../components/ApplicationDetails";
 import { NoteDialog } from "../components/NoteDialog";
-import { ApplicationStatus } from "../index";
+import { ApplicationStatus, ApplicationType } from "../index";
 import type { ApplicationRead } from "../index";
 
 const STATUS_CYCLE: ApplicationStatus[] = [
@@ -54,15 +64,164 @@ function nextStatus(current: ApplicationStatus): ApplicationStatus {
   return STATUS_CYCLE[(index + 1) % STATUS_CYCLE.length];
 }
 
-const MONTHS = [
+const SHORT_MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-function formatDate(dateApplied: string | null): string {
-  if (!dateApplied) return "—";
-  const [year, month, day] = dateApplied.split("T")[0].split("-");
-  return `${MONTHS[Number(month) - 1]} ${Number(day)}, ${year}`;
+function formatShortDate(value: string): string {
+  const [, month, day] = value.split("-");
+  return `${SHORT_MONTHS[Number(month) - 1]} ${Number(day)}`;
+}
+
+type SortField =
+  | "created_at"
+  | "title"
+  | "company"
+  | "status"
+  | "location"
+  | "type"
+  | "date_applied"
+  | "deadline";
+type SortDir = "asc" | "desc";
+
+// Every sortable field except the default ("created_at" has no menu entry;
+// it's reached via the "Sort by creation" reset button instead).
+const SORT_MENU_FIELD_LABELS: Record<Exclude<SortField, "created_at">, string> = {
+  title: "Title",
+  company: "Company",
+  status: "Status",
+  location: "Location",
+  type: "Type",
+  date_applied: "Applied Date",
+  deadline: "Deadline",
+};
+
+// These fields also have their own sortable table header, which already
+// shows the active direction — the Sort button stays generic for them
+// instead of duplicating that state.
+function hasHeaderArrow(field: SortField): boolean {
+  return field === "title" || field === "company" || field === "status";
+}
+
+const ALL_STATUSES = "__all__";
+const ALL_TYPES = "__all_types__";
+
+type CustomFilterField = "title" | "company" | "location";
+const NO_CUSTOM_FILTER = "__none__";
+
+const CUSTOM_FILTER_LABELS: Record<CustomFilterField, string> = {
+  title: "Title",
+  company: "Company",
+  location: "Location",
+};
+
+const STATUS_ORDER: Record<ApplicationStatus, number> = {
+  [ApplicationStatus.ToApply]: 0,
+  [ApplicationStatus.Applied]: 1,
+  [ApplicationStatus.Screening]: 2,
+  [ApplicationStatus.Interview]: 3,
+  [ApplicationStatus.Offer]: 4,
+  [ApplicationStatus.Rejected]: 5,
+  [ApplicationStatus.Withdrawn]: 6,
+};
+
+// Nulls/blanks always sort to the end, regardless of sort direction.
+function compareNullable<T>(
+  a: T | null,
+  b: T | null,
+  dirMul: number,
+  compare: (a: T, b: T) => number,
+): number {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return dirMul * compare(a, b);
+}
+
+function compareApplications(
+  a: ApplicationRead,
+  b: ApplicationRead,
+  field: SortField,
+  dir: SortDir,
+): number {
+  const dirMul = dir === "desc" ? -1 : 1;
+  switch (field) {
+    case "created_at":
+      return dirMul * (a.created_at ?? "").localeCompare(b.created_at ?? "");
+    case "title":
+      return dirMul * a.title.localeCompare(b.title);
+    case "company":
+      return dirMul * a.company.localeCompare(b.company);
+    case "status":
+      return dirMul * (STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
+    case "location":
+      return compareNullable(a.location, b.location, dirMul, (x, y) => x.localeCompare(y));
+    case "type":
+      return compareNullable(a.type, b.type, dirMul, (x, y) => x.localeCompare(y));
+    case "date_applied":
+      return compareNullable(a.date_applied, b.date_applied, dirMul, (x, y) => x.localeCompare(y));
+    case "deadline":
+      return compareNullable(a.deadline, b.deadline, dirMul, (x, y) => x.localeCompare(y));
+  }
+}
+
+interface SortableHeaderProps {
+  label: string;
+  field: SortField;
+  activeField: SortField;
+  dir: SortDir;
+  onSort: (field: SortField) => void;
+  width?: string;
+  minW?: string;
+}
+
+// The direction icon is always visible on the active column; on inactive
+// columns it only appears on hover, as a hint that the header is clickable.
+function SortableHeader({ label, field, activeField, dir, onSort, width, minW }: SortableHeaderProps) {
+  const isActive = activeField === field;
+  return (
+    <Table.ColumnHeader
+      w={width}
+      minW={minW}
+      color="fg.muted"
+      cursor="pointer"
+      userSelect="none"
+      className="group"
+      onClick={() => onSort(field)}
+      _hover={{ color: "fg" }}
+    >
+      <Flex align="center" gap="1">
+        {label}
+        {isActive ? (
+          dir === "asc" ? <LuArrowUp size={14} /> : <LuArrowDown size={14} />
+        ) : (
+          <Box opacity="0" _groupHover={{ opacity: 1 }}>
+            <LuArrowUpDown size={14} />
+          </Box>
+        )}
+      </Flex>
+    </Table.ColumnHeader>
+  );
+}
+
+// A lineClamp="2" cell renders one line tall unless its text actually
+// wrapped; scrollHeight noticeably exceeding a single line's height means it did.
+function computeWrappedIds(refs: Map<number, HTMLParagraphElement>): Set<number> {
+  const result = new Set<number>();
+  refs.forEach((el, id) => {
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight);
+    if (!Number.isNaN(lineHeight) && el.scrollHeight > lineHeight * 1.5) {
+      result.add(id);
+    }
+  });
+  return result;
+}
+
+function setsAreEqual(a: Set<number>, b: Set<number>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of a) if (!b.has(id)) return false;
+  return true;
 }
 
 export function Dashboard() {
@@ -74,6 +233,23 @@ export function Dashboard() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [viewingId, setViewingId] = useState<number | null>(null);
   const [noteId, setNoteId] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [sortField, setSortField] = useState<SortField>("created_at");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [statusFilter, setStatusFilter] = useState<ApplicationStatus | null>(null);
+  const [typeFilter, setTypeFilter] = useState<ApplicationType | null>(null);
+  const [appliedDateFrom, setAppliedDateFrom] = useState("");
+  const [appliedDateTo, setAppliedDateTo] = useState("");
+  const [customFilterField, setCustomFilterField] = useState<CustomFilterField | null>(null);
+  const [customFilterText, setCustomFilterText] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const titleTextRefs = useRef<Map<number, HTMLParagraphElement>>(new Map());
+  const companyTextRefs = useRef<Map<number, HTMLParagraphElement>>(new Map());
+  const [wrappedTitleIds, setWrappedTitleIds] = useState<Set<number>>(new Set());
+  const [wrappedCompanyIds, setWrappedCompanyIds] = useState<Set<number>>(new Set());
+
+  const isModalOpen = isAdding || editingId !== null || viewingId !== null || noteId !== null;
 
   const editingApp = applications.find((a) => a.id === editingId);
   const viewingApp = applications.find((a) => a.id === viewingId);
@@ -82,7 +258,7 @@ export function Dashboard() {
   // Distinct existing values, offered as autocomplete suggestions in the form.
   const suggestions = {
     companies: [...new Set(applications.map((a) => a.company))].sort(),
-    roles: [...new Set(applications.map((a) => a.role))].sort(),
+    titles: [...new Set(applications.map((a) => a.title))].sort(),
     locations: [
       ...new Set(applications.flatMap((a) => (a.location ? [a.location] : []))),
     ].sort(),
@@ -94,6 +270,130 @@ export function Dashboard() {
       .catch(() => setError("Could not load applications."))
       .finally(() => setIsLoading(false));
   }, []);
+
+  // Typing anywhere outside an input/modal reveals the search bar and seeds
+  // it with the pressed key, like Gmail/Notion's quick-find.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (isSearchVisible || isModalOpen) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.length !== 1) return;
+
+      const target = e.target as HTMLElement | null;
+      const isEditableTarget =
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (isEditableTarget) return;
+
+      setIsSearchVisible(true);
+      setSearchQuery(e.key);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSearchVisible, isModalOpen]);
+
+  useEffect(() => {
+    if (isSearchVisible) searchInputRef.current?.focus();
+  }, [isSearchVisible]);
+
+  function closeSearch() {
+    setSearchQuery("");
+    setIsSearchVisible(false);
+  }
+
+  function handleHeaderSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  }
+
+  const filteredApplications = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    let result = applications;
+
+    if (query) {
+      result = result.filter(
+        (a) =>
+          a.company.toLowerCase().includes(query) ||
+          a.title.toLowerCase().includes(query) ||
+          (a.location ?? "").toLowerCase().includes(query) ||
+          (a.notes ?? "").toLowerCase().includes(query),
+      );
+    }
+
+    if (statusFilter) {
+      result = result.filter((a) => a.status === statusFilter);
+    }
+
+    if (typeFilter) {
+      result = result.filter((a) => a.type === typeFilter);
+    }
+
+    if (appliedDateFrom) {
+      result = result.filter((a) => {
+        const date = a.date_applied?.slice(0, 10);
+        return date !== undefined && date >= appliedDateFrom;
+      });
+    }
+
+    if (appliedDateTo) {
+      result = result.filter((a) => {
+        const date = a.date_applied?.slice(0, 10);
+        return date !== undefined && date <= appliedDateTo;
+      });
+    }
+
+    if (customFilterField && customFilterText.trim()) {
+      const text = customFilterText.trim().toLowerCase();
+      result = result.filter((a) => {
+        const value =
+          customFilterField === "title"
+            ? a.title
+            : customFilterField === "company"
+              ? a.company
+              : a.location;
+        return (value ?? "").toLowerCase().includes(text);
+      });
+    }
+
+    return result;
+  }, [
+    applications,
+    searchQuery,
+    statusFilter,
+    typeFilter,
+    appliedDateFrom,
+    appliedDateTo,
+    customFilterField,
+    customFilterText,
+  ]);
+
+  const isFiltered =
+    Boolean(searchQuery.trim()) ||
+    statusFilter !== null ||
+    typeFilter !== null ||
+    Boolean(appliedDateFrom) ||
+    Boolean(appliedDateTo) ||
+    (customFilterField !== null && Boolean(customFilterText.trim()));
+
+  const sortedApplications = useMemo(
+    () => [...filteredApplications].sort((a, b) => compareApplications(a, b, sortField, sortDir)),
+    [filteredApplications, sortField, sortDir],
+  );
+
+  // Title/Company are fixed-width, so wrapping only changes when the data does.
+  useLayoutEffect(() => {
+    const nextTitleWrapped = computeWrappedIds(titleTextRefs.current);
+    const nextCompanyWrapped = computeWrappedIds(companyTextRefs.current);
+    setWrappedTitleIds((prev) => (setsAreEqual(prev, nextTitleWrapped) ? prev : nextTitleWrapped));
+    setWrappedCompanyIds((prev) =>
+      setsAreEqual(prev, nextCompanyWrapped) ? prev : nextCompanyWrapped,
+    );
+  }, [filteredApplications]);
 
   async function handleAdd(data: Parameters<typeof createApplication>[0]) {
     const application = await createApplication(data);
@@ -120,19 +420,60 @@ export function Dashboard() {
 
   return (
     <Box minH="100vh" bg="bg.subtle" py="8">
-      <Container maxW="7xl">
-        <Flex justify="space-between" align="center" mb="6">
+      <Container maxW="4xl">
+        <Box maxW="750px" mx="auto">
+        <Flex justify="space-between" align="center" mb="16">
           <Box>
             <Heading size="xl">Applications</Heading>
             <Text textStyle="sm" color="fg.muted">
-              {user?.email} · {applications.length} application
-              {applications.length === 1 ? "" : "s"}
+              {user?.email} ·{" "}
+              {isFiltered
+                ? `${sortedApplications.length} of ${applications.length} application${applications.length === 1 ? "" : "s"}`
+                : `${applications.length} application${applications.length === 1 ? "" : "s"}`}
             </Text>
           </Box>
           <Button onClick={logout} variant="ghost" size="sm" color="fg.muted">
             <LuLogOut /> Log out
           </Button>
         </Flex>
+
+        {isSearchVisible && (
+          <Flex align="center" gap="2" mb="4">
+            <Box position="relative" flex="1">
+              <Box
+                position="absolute"
+                left="3"
+                top="50%"
+                transform="translateY(-50%)"
+                color="fg.subtle"
+                pointerEvents="none"
+              >
+                <LuSearch size={16} />
+              </Box>
+              <Input
+                ref={searchInputRef}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") closeSearch();
+                }}
+                placeholder="Search by company, title, location, or notes..."
+                ps="9"
+              />
+            </Box>
+            <IconButton
+              onClick={closeSearch}
+              aria-label="Close search"
+              title="Close search"
+              variant="ghost"
+              size="sm"
+              color="fg.muted"
+              _hover={{ color: "fg" }}
+            >
+              <LuX />
+            </IconButton>
+          </Flex>
+        )}
 
         <Button
           onClick={() => setIsAdding(true)}
@@ -145,6 +486,257 @@ export function Dashboard() {
         >
           <LuPlus /> Add Application
         </Button>
+
+        <Box mb="4">
+        <Flex gap="2" wrap="wrap" align="center">
+          <Menu.Root
+            positioning={{ placement: "bottom-start" }}
+            onSelect={(e) =>
+              setTypeFilter(e.value === ALL_TYPES ? null : (e.value as ApplicationType))
+            }
+          >
+            <Menu.Trigger asChild>
+              <Button variant="outline" size="sm" color="fg.muted" rounded="full" h="7">
+                {typeFilter ? `${typeFilter}` : "Any Type"}
+                <LuChevronDown />
+              </Button>
+            </Menu.Trigger>
+            <Portal>
+              <Menu.Positioner>
+                <Menu.Content>
+                  <Menu.Item value={ALL_TYPES}>
+                    Any Type
+                    {!typeFilter && <LuCheck />}
+                  </Menu.Item>
+                  {Object.values(ApplicationType).map((type) => (
+                    <Menu.Item key={type} value={type}>
+                      {type}
+                      {typeFilter === type && <LuCheck />}
+                    </Menu.Item>
+                  ))}
+                </Menu.Content>
+              </Menu.Positioner>
+            </Portal>
+          </Menu.Root>
+
+          <Menu.Root
+            positioning={{ placement: "bottom-start" }}
+            onSelect={(e) =>
+              setStatusFilter(e.value === ALL_STATUSES ? null : (e.value as ApplicationStatus))
+            }
+          >
+            <Menu.Trigger asChild>
+              <Button variant="outline" size="sm" color="fg.muted" rounded="full" h="7">
+                {statusFilter ? `${statusFilter}` : "Any Status"}
+                <LuChevronDown />
+              </Button>
+            </Menu.Trigger>
+            <Portal>
+              <Menu.Positioner>
+                <Menu.Content>
+                  <Menu.Item value={ALL_STATUSES}>
+                    Any Status
+                    {!statusFilter && <LuCheck />}
+                  </Menu.Item>
+                  {Object.values(ApplicationStatus).map((status) => (
+                    <Menu.Item key={status} value={status}>
+                      {status}
+                      {statusFilter === status && <LuCheck />}
+                    </Menu.Item>
+                  ))}
+                </Menu.Content>
+              </Menu.Positioner>
+            </Portal>
+          </Menu.Root>
+
+          <Popover.Root positioning={{ placement: "bottom-start" }}>
+            <Popover.Trigger asChild>
+              <Button variant="outline" size="sm" color="fg.muted" rounded="full" h="7">
+                {appliedDateFrom || appliedDateTo ? (
+                  <>
+                    {appliedDateFrom ? formatShortDate(appliedDateFrom) : "Any"}
+                    {" – "}
+                    {appliedDateTo ? formatShortDate(appliedDateTo) : "Any"}
+                  </>
+                ) : (
+                  "When"
+                )}
+                <LuChevronDown />
+              </Button>
+            </Popover.Trigger>
+            <Portal>
+              <Popover.Positioner>
+                <Popover.Content>
+                  <Popover.Body>
+                    <Flex direction="column" gap="2">
+                      <Box>
+                        <Text textStyle="xs" color="fg.muted" mb="1">
+                          Applied from
+                        </Text>
+                        <Input
+                          type="date"
+                          value={appliedDateFrom}
+                          onChange={(e) => setAppliedDateFrom(e.target.value)}
+                          size="sm"
+                        />
+                      </Box>
+                      <Box>
+                        <Text textStyle="xs" color="fg.muted" mb="1">
+                          Applied to
+                        </Text>
+                        <Input
+                          type="date"
+                          value={appliedDateTo}
+                          onChange={(e) => setAppliedDateTo(e.target.value)}
+                          size="sm"
+                        />
+                      </Box>
+                      {(appliedDateFrom || appliedDateTo) && (
+                        <Button
+                          onClick={() => {
+                            setAppliedDateFrom("");
+                            setAppliedDateTo("");
+                          }}
+                          variant="ghost"
+                          size="xs"
+                          color="fg.muted"
+                        >
+                          <LuX /> Clear
+                        </Button>
+                      )}
+                    </Flex>
+                  </Popover.Body>
+                </Popover.Content>
+              </Popover.Positioner>
+            </Portal>
+          </Popover.Root>
+
+          <Menu.Root
+            positioning={{ placement: "bottom-start" }}
+            onSelect={(e) => {
+              setCustomFilterText("");
+              setCustomFilterField(e.value === NO_CUSTOM_FILTER ? null : (e.value as CustomFilterField));
+            }}
+          >
+            <Menu.Trigger asChild>
+              <Button
+                title={customFilterField ? `Filter: ${CUSTOM_FILTER_LABELS[customFilterField]}` : "Add filter"}
+                variant="ghost"
+                size="sm"
+                color={customFilterField ? "fg" : "fg.muted"}
+                rounded="full"
+                h="7"
+                px="2"
+              >
+                {customFilterField ? (
+                  `Filter: ${CUSTOM_FILTER_LABELS[customFilterField]}`
+                ) : (
+                  <>
+                    Add Filter
+                  </>
+                )}
+              </Button>
+            </Menu.Trigger>
+            <Portal>
+              <Menu.Positioner>
+                <Menu.Content>
+                  <Menu.Item value={NO_CUSTOM_FILTER}>
+                    None
+                    {!customFilterField && <LuCheck />}
+                  </Menu.Item>
+                  {(Object.keys(CUSTOM_FILTER_LABELS) as CustomFilterField[]).map((field) => (
+                    <Menu.Item key={field} value={field}>
+                      {CUSTOM_FILTER_LABELS[field]}
+                      {customFilterField === field && <LuCheck />}
+                    </Menu.Item>
+                  ))}
+                </Menu.Content>
+              </Menu.Positioner>
+            </Portal>
+          </Menu.Root>
+
+          <Flex gap="2" ml="auto">
+            {sortField !== "created_at" && (
+              <Button
+                onClick={() => {
+                  setSortField("created_at");
+                  setSortDir("desc");
+                }}
+                variant="outline"
+                size="sm"
+                color="fg.muted"
+                rounded="full"
+                h="7"
+              >
+                Sort by Creation
+              </Button>
+            )}
+
+            <Menu.Root
+              positioning={{ placement: "bottom-end" }}
+              onSelect={(e) => {
+                if (e.value === "dir:asc" || e.value === "dir:desc") {
+                  setSortDir(e.value === "dir:asc" ? "asc" : "desc");
+                } else {
+                  setSortField(e.value as SortField);
+                }
+              }}
+            >
+              <Menu.Trigger asChild>
+                <Button variant="outline" size="sm" color="fg.muted" title="Custom sort" rounded="full" h="7">
+                  {sortField !== "created_at" && !hasHeaderArrow(sortField) ? (
+                    <>
+                      {SORT_MENU_FIELD_LABELS[sortField]}
+                      {sortDir === "asc" ? <LuArrowUp /> : <LuArrowDown />}
+                    </>
+                  ) : (
+                    <LuArrowUpDown />
+                  )}
+                </Button>
+              </Menu.Trigger>
+              <Portal>
+                <Menu.Positioner>
+                  <Menu.Content>
+                    <Menu.Item value="dir:asc">
+                      Ascending
+                      {sortDir === "asc" && <LuCheck />}
+                    </Menu.Item>
+                    <Menu.Item value="dir:desc">
+                      Descending
+                      {sortDir === "desc" && <LuCheck />}
+                    </Menu.Item>
+                    <Menu.Separator />
+                    <Menu.Item value="created_at">
+                      Creation (Default)
+                      {sortField === "created_at" && <LuCheck />}
+                    </Menu.Item>
+                    {(Object.keys(SORT_MENU_FIELD_LABELS) as Exclude<SortField, "created_at">[]).map(
+                      (field) => (
+                        <Menu.Item key={field} value={field}>
+                          {SORT_MENU_FIELD_LABELS[field]}
+                          {sortField === field && <LuCheck />}
+                        </Menu.Item>
+                      ),
+                    )}
+                  </Menu.Content>
+                </Menu.Positioner>
+              </Portal>
+            </Menu.Root>
+          </Flex>
+        </Flex>
+
+        {customFilterField && (
+          <Input
+            value={customFilterText}
+            onChange={(e) => setCustomFilterText(e.target.value)}
+            placeholder={`Filter by ${CUSTOM_FILTER_LABELS[customFilterField].toLowerCase()}...`}
+            size="sm"
+            maxW="220px"
+            mt="2"
+          />
+        )}
+        </Box>
+        </Box>
 
         {isAdding && (
           <ApplicationForm
@@ -172,6 +764,10 @@ export function Dashboard() {
           <ApplicationDetails
             application={viewingApp}
             onClose={() => setViewingId(null)}
+            onOpenNote={() => {
+              setViewingId(null);
+              setNoteId(viewingApp.id);
+            }}
           />
         )}
 
@@ -209,44 +805,43 @@ export function Dashboard() {
           </EmptyState.Root>
         )}
 
-        {!isLoading && !error && applications.length > 0 && (
-          <Card.Root overflow="hidden">
+        {!isLoading && !error && applications.length > 0 && sortedApplications.length === 0 && (
+          <EmptyState.Root>
+            <EmptyState.Content>
+              <EmptyState.Indicator>
+                <LuSearchX />
+              </EmptyState.Indicator>
+              <EmptyState.Title>No matches</EmptyState.Title>
+              <EmptyState.Description>
+                No applications match the current search and filters.
+              </EmptyState.Description>
+            </EmptyState.Content>
+          </EmptyState.Root>
+        )}
+
+        {!isLoading && !error && sortedApplications.length > 0 && (
+          <Card.Root overflow="hidden" w="full" maxW="750px" mx="auto">
             <Table.ScrollArea>
               <Table.Root
                 size="sm"
                 tableLayout="fixed"
-                minW="1100px"
+                minW="660px"
                 css={{
                   "& td": { paddingBlock: "1" },
                   "& th": { paddingBlock: "1.5" },
-                  // Freeze the Actions column to the right edge during
-                  // horizontal scroll; cells inherit the row background so
-                  // hover still works.
-                  "& th:last-of-type, & td:last-of-type": {
-                    position: "sticky",
-                    right: 0,
-                    zIndex: 1,
-                    background: "inherit",
-                    boxShadow: "inset 1px 0 0 var(--chakra-colors-border)",
-                  },
                 }}
               >
               <Table.Header>
                 <Table.Row bg="bg.muted">
-                  <Table.ColumnHeader>Role</Table.ColumnHeader>
-                  <Table.ColumnHeader w="150px">Company</Table.ColumnHeader>
-                  <Table.ColumnHeader w="100px">Location</Table.ColumnHeader>
-                  <Table.ColumnHeader w="90px">Type</Table.ColumnHeader>
-                  <Table.ColumnHeader w="100px">Pay</Table.ColumnHeader>
-                  <Table.ColumnHeader w="100px">Date Applied</Table.ColumnHeader>
-                  <Table.ColumnHeader w="100px">Deadline</Table.ColumnHeader>
-                  <Table.ColumnHeader w="85px">Status</Table.ColumnHeader>
-                  <Table.ColumnHeader w="70px">Notes</Table.ColumnHeader>
-                  <Table.ColumnHeader w="110px">Actions</Table.ColumnHeader>
+                  <Table.ColumnHeader w="40px" textAlign="center" color="fg.muted">#</Table.ColumnHeader>
+                  <SortableHeader label="Title" field="title" activeField={sortField} dir={sortDir} onSort={handleHeaderSort} width="250px" />
+                  <SortableHeader label="Company" field="company" activeField={sortField} dir={sortDir} onSort={handleHeaderSort} width="150px" />
+                  <SortableHeader label="Status" field="status" activeField={sortField} dir={sortDir} onSort={handleHeaderSort} minW="70px" />
+                  <Table.ColumnHeader w="150px" color="fg.muted">Actions</Table.ColumnHeader>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
-                {applications.map((app) => (
+                {sortedApplications.map((app, index) => (
                   <Table.Row
                       key={app.id}
                       className="group"
@@ -255,7 +850,14 @@ export function Dashboard() {
                       bg="bg.panel"
                       _hover={{ bg: "bg.subtle" }}
                     >
-                      <Table.Cell>
+                      <Table.Cell w="40px" textAlign="center">
+                        <Text textStyle="sm" color="fg.subtle">
+                          {index + 1}
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell
+                        style={wrappedTitleIds.has(app.id) ? { paddingBlock: "10px" } : undefined}
+                      >
                         {app.url ? (
                           <Link
                             href={app.url}
@@ -266,47 +868,50 @@ export function Dashboard() {
                             color="fg"
                             maxW="full"
                           >
-                            <Text truncate>{app.role}</Text>
+                            <Text
+                              ref={(el) => {
+                                if (el) titleTextRefs.current.set(app.id, el);
+                                else titleTextRefs.current.delete(app.id);
+                              }}
+                              lineClamp="2"
+                              whiteSpace="normal"
+                            >
+                              {app.title}
+                            </Text>
                             <LuExternalLink size={12} style={{ flexShrink: 0 }} />
                           </Link>
                         ) : (
-                          <Text fontWeight="medium" truncate>
-                            {app.role}
+                          <Text
+                            ref={(el) => {
+                              if (el) titleTextRefs.current.set(app.id, el);
+                              else titleTextRefs.current.delete(app.id);
+                            }}
+                            fontWeight="medium"
+                            lineClamp="2"
+                            whiteSpace="normal"
+                          >
+                            {app.title}
                           </Text>
                         )}
                       </Table.Cell>
-                      <Table.Cell>
-                        <Text textStyle="sm" color="fg.muted" truncate>
+                      <Table.Cell
+                        style={wrappedCompanyIds.has(app.id) ? { paddingBlock: "10px" } : undefined}
+                      >
+                        <Text
+                          ref={(el) => {
+                            if (el) companyTextRefs.current.set(app.id, el);
+                            else companyTextRefs.current.delete(app.id);
+                          }}
+                          textStyle="sm"
+                          color="fg"
+                          lineClamp="2"
+                          whiteSpace="normal"
+                        >
                           {app.company}
                         </Text>
                       </Table.Cell>
-                      <Table.Cell>
-                        <Text textStyle="sm" color="fg.muted" truncate>
-                          {app.location || "—"}
-                        </Text>
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Text textStyle="sm" color="fg.muted" truncate>
-                          {app.type || "—"}
-                        </Text>
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Text textStyle="sm" color="fg.muted" truncate>
-                          {app.pay || "—"}
-                        </Text>
-                      </Table.Cell>
-                      <Table.Cell textAlign="center">
-                        <Text textStyle="sm" color="fg.subtle">
-                          {formatDate(app.date_applied)}
-                        </Text>
-                      </Table.Cell>
-                      <Table.Cell textAlign="center">
-                        <Text textStyle="sm" color="fg.subtle">
-                          {formatDate(app.deadline)}
-                        </Text>
-                      </Table.Cell>
                       <Table.Cell
-                        textAlign="center"
+                        minW="70px"
                         onClick={(e) => e.stopPropagation()}
                         cursor="default"
                       >
@@ -316,46 +921,13 @@ export function Dashboard() {
                         />
                       </Table.Cell>
                       <Table.Cell
-                        textAlign="center"
-                        onClick={(e) => e.stopPropagation()}
-                        cursor="default"
-                      >
-                        {app.notes ? (
-                          <IconButton
-                            onClick={() => setNoteId(app.id)}
-                            aria-label="View note"
-                            title="View note"
-                            variant="ghost"
-                            size="2xs"
-                            color="fg.subtle"
-                            _hover={{ color: "fg" }}
-                          >
-                            <LuFileText />
-                          </IconButton>
-                        ) : (
-                          <IconButton
-                            onClick={() => setNoteId(app.id)}
-                            aria-label="Add note"
-                            title="Add note"
-                            variant="ghost"
-                            size="2xs"
-                            color="fg.subtle"
-                            opacity="0"
-                            _groupHover={{ opacity: 1 }}
-                            _hover={{ color: "fg" }}
-                          >
-                            <LuFilePlus />
-                          </IconButton>
-                        )}
-                      </Table.Cell>
-                      <Table.Cell
                         onClick={(e) => e.stopPropagation()}
                         cursor="default"
                       >
                         <Flex
                           align="center"
-                          justify="center"
-                          gap="0"
+                          justify="flex-end"
+                          gap="0.5"
                           opacity="0"
                           _groupHover={{ opacity: 1 }}
                         >
@@ -364,7 +936,7 @@ export function Dashboard() {
                             aria-label="Mark as Offer"
                             title="Mark as Offer"
                             variant="ghost"
-                            size="2xs"
+                            size="xs"
                             colorPalette="green"
                           >
                             <LuDollarSign />
@@ -374,17 +946,17 @@ export function Dashboard() {
                             aria-label="Mark as Rejected"
                             title="Mark as Rejected"
                             variant="ghost"
-                            size="2xs"
+                            size="xs"
                             colorPalette="red"
                           >
-                            <LuFlag />
+                            <LuBan />
                           </IconButton>
                           <IconButton
                             onClick={() => setViewingId(app.id)}
                             aria-label="View details"
                             title="View details"
                             variant="ghost"
-                            size="2xs"
+                            size="xs"
                             color="fg.subtle"
                             _hover={{ color: "fg" }}
                           >
@@ -395,7 +967,7 @@ export function Dashboard() {
                             aria-label="Delete application"
                             title="Delete"
                             variant="ghost"
-                            size="2xs"
+                            size="xs"
                             colorPalette="red"
                             color="fg.subtle"
                             _hover={{ color: "fg.error" }}
