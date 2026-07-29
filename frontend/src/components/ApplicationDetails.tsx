@@ -2,10 +2,12 @@ import {
   CloseButton,
   DataList,
   Dialog,
+  Flex,
+  IconButton,
   Link,
   Portal,
 } from "@chakra-ui/react";
-import { LuExternalLink } from "react-icons/lu";
+import { LuExternalLink, LuFilePlus, LuFileText } from "react-icons/lu";
 import { StatusBadge } from "./StatusBadge";
 import type { ApplicationRead } from "../index";
 
@@ -40,11 +42,13 @@ function formatDateTime(value: string | null): string {
 interface ApplicationDetailsProps {
   application: ApplicationRead;
   onClose: () => void;
+  onOpenNote: () => void;
 }
 
 export function ApplicationDetails({
   application,
   onClose,
+  onOpenNote,
 }: ApplicationDetailsProps) {
   return (
     <Dialog.Root open onOpenChange={(e) => !e.open && onClose()}>
@@ -123,7 +127,20 @@ export function ApplicationDetails({
                 <DataList.Item>
                   <DataList.ItemLabel>Notes</DataList.ItemLabel>
                   <DataList.ItemValue>
-                    {application.notes || "—"}
+                    <Flex align="center" gap="2">
+                      {application.notes || "—"}
+                      <IconButton
+                        onClick={onOpenNote}
+                        aria-label={application.notes ? "View note" : "Add note"}
+                        title={application.notes ? "View note" : "Add note"}
+                        variant="ghost"
+                        size="2xs"
+                        color="fg.subtle"
+                        _hover={{ color: "fg" }}
+                      >
+                        {application.notes ? <LuFileText /> : <LuFilePlus />}
+                      </IconButton>
+                    </Flex>
                   </DataList.ItemValue>
                 </DataList.Item>
                 <DataList.Item>

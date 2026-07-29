@@ -48,7 +48,7 @@ export function NoteDialog({ application, onSave, onClose }: NoteDialogProps) {
               <Dialog.Title>
                 {isAdding
                   ? "Add Note"
-                  : `Note: ${application.role} @ ${application.company}`}
+                  : `Note: ${application.title} @ ${application.company}`}
               </Dialog.Title>
             </Dialog.Header>
             <Dialog.Body>
