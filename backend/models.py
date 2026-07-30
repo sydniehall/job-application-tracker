@@ -4,6 +4,7 @@ from typing import Optional, List
 from pydantic import EmailStr
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, DateTime, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.sql import func
 
 
@@ -69,8 +70,20 @@ class Application(SQLModel, table=True):
     user_id: int = Field(foreign_key="users.id")
     company: str
     title: str
-    status: ApplicationStatus = Field(default=ApplicationStatus.applied)
-    type: Optional[ApplicationType] = None
+    status: ApplicationStatus = Field(
+        default=ApplicationStatus.applied,
+        sa_column=Column(
+            SAEnum(ApplicationStatus, values_callable=lambda enum: [e.value for e in enum]),
+            nullable=False,
+        ),
+    )
+    type: Optional[ApplicationType] = Field(
+        default=None,
+        sa_column=Column(
+            SAEnum(ApplicationType, values_callable=lambda enum: [e.value for e in enum]),
+            nullable=True,
+        ),
+    )
     date_applied: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True)
