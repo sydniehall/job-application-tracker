@@ -63,6 +63,44 @@ export interface ApplicationRead {
   updated_at: string | null;
 }
 
+export interface ApplicationPage {
+  items: ApplicationRead[];
+  total: number;
+  has_more: boolean;
+}
+
+export interface ApplicationSuggestions {
+  companies: string[];
+  titles: string[];
+  locations: string[];
+}
+
+export type ApplicationSortField =
+  | "created_at"
+  | "title"
+  | "company"
+  | "status"
+  | "location"
+  | "type"
+  | "date_applied"
+  | "deadline";
+
+export type ApplicationCustomFilterField = "title" | "company" | "location";
+
+export interface ApplicationsQuery {
+  limit: number;
+  offset: number;
+  q?: string;
+  status?: ApplicationStatus;
+  type?: ApplicationType;
+  date_applied_from?: string;
+  date_applied_to?: string;
+  custom_field?: ApplicationCustomFilterField;
+  custom_value?: string;
+  sort_field?: ApplicationSortField;
+  sort_dir?: "asc" | "desc";
+}
+
 export interface ApplicationUpdate {
   company?: string | null;
   title?: string | null;

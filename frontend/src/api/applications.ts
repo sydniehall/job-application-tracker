@@ -1,8 +1,20 @@
 import client from "./client";
-import type { ApplicationCreate, ApplicationRead, ApplicationUpdate } from "../index";
+import type {
+  ApplicationCreate,
+  ApplicationPage,
+  ApplicationRead,
+  ApplicationSuggestions,
+  ApplicationUpdate,
+  ApplicationsQuery,
+} from "../index";
 
-export async function getApplications(): Promise<ApplicationRead[]> {
-  const res = await client.get<ApplicationRead[]>("/applications");
+export async function getApplications(query: ApplicationsQuery): Promise<ApplicationPage> {
+  const res = await client.get<ApplicationPage>("/applications", { params: query });
+  return res.data;
+}
+
+export async function getApplicationSuggestions(): Promise<ApplicationSuggestions> {
+  const res = await client.get<ApplicationSuggestions>("/applications/suggestions");
   return res.data;
 }
 

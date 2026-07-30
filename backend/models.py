@@ -153,6 +153,18 @@ class ApplicationRead(SQLModel):
     updated_at: Optional[datetime]
 
 
+class ApplicationPage(SQLModel):
+    items: List[ApplicationRead]
+    total: int
+    has_more: bool
+
+
+class ApplicationSuggestions(SQLModel):
+    companies: List[str]
+    titles: List[str]
+    locations: List[str]
+
+
 class ApplicationUpdate(SQLModel):
     company: Optional[str] = None
     title: Optional[str] = None

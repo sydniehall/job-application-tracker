@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -41,6 +41,7 @@ import { useAuth } from "../context/AuthContext";
 import {
   createApplication,
   deleteApplication,
+  getApplicationSuggestions,
   getApplications,
   updateApplication,
 } from "../api/applications";
@@ -49,7 +50,12 @@ import { ApplicationForm } from "../components/ApplicationForm";
 import { ApplicationDetails } from "../components/ApplicationDetails";
 import { NoteDialog } from "../components/NoteDialog";
 import { ApplicationStatus, ApplicationType } from "../index";
-import type { ApplicationRead } from "../index";
+import type { ApplicationRead, ApplicationSuggestions, ApplicationsQuery } from "../index";
+
+const PAGE_SIZE = 20;
+const DEBOUNCE_MS = 300;
+
+const EMPTY_SUGGESTIONS: ApplicationSuggestions = { companies: [], titles: [], locations: [] };
 
 const STATUS_CYCLE: ApplicationStatus[] = [
   ApplicationStatus.Applied,
@@ -116,56 +122,6 @@ const CUSTOM_FILTER_LABELS: Record<CustomFilterField, string> = {
   location: "Location",
 };
 
-const STATUS_ORDER: Record<ApplicationStatus, number> = {
-  [ApplicationStatus.ToApply]: 0,
-  [ApplicationStatus.Applied]: 1,
-  [ApplicationStatus.Screening]: 2,
-  [ApplicationStatus.Interview]: 3,
-  [ApplicationStatus.Offer]: 4,
-  [ApplicationStatus.Rejected]: 5,
-  [ApplicationStatus.Withdrawn]: 6,
-};
-
-// Nulls/blanks always sort to the end, regardless of sort direction.
-function compareNullable<T>(
-  a: T | null,
-  b: T | null,
-  dirMul: number,
-  compare: (a: T, b: T) => number,
-): number {
-  if (a === null && b === null) return 0;
-  if (a === null) return 1;
-  if (b === null) return -1;
-  return dirMul * compare(a, b);
-}
-
-function compareApplications(
-  a: ApplicationRead,
-  b: ApplicationRead,
-  field: SortField,
-  dir: SortDir,
-): number {
-  const dirMul = dir === "desc" ? -1 : 1;
-  switch (field) {
-    case "created_at":
-      return dirMul * (a.created_at ?? "").localeCompare(b.created_at ?? "");
-    case "title":
-      return dirMul * a.title.localeCompare(b.title);
-    case "company":
-      return dirMul * a.company.localeCompare(b.company);
-    case "status":
-      return dirMul * (STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
-    case "location":
-      return compareNullable(a.location, b.location, dirMul, (x, y) => x.localeCompare(y));
-    case "type":
-      return compareNullable(a.type, b.type, dirMul, (x, y) => x.localeCompare(y));
-    case "date_applied":
-      return compareNullable(a.date_applied, b.date_applied, dirMul, (x, y) => x.localeCompare(y));
-    case "deadline":
-      return compareNullable(a.deadline, b.deadline, dirMul, (x, y) => x.localeCompare(y));
-  }
-}
-
 interface SortableHeaderProps {
   label: string;
   field: SortField;
@@ -227,13 +183,18 @@ function setsAreEqual(a: Set<number>, b: Set<number>): boolean {
 export function Dashboard() {
   const { user, logout } = useAuth();
   const [applications, setApplications] = useState<ApplicationRead[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<ApplicationSuggestions>(EMPTY_SUGGESTIONS);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [viewingId, setViewingId] = useState<number | null>(null);
   const [noteId, setNoteId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -243,11 +204,14 @@ export function Dashboard() {
   const [appliedDateTo, setAppliedDateTo] = useState("");
   const [customFilterField, setCustomFilterField] = useState<CustomFilterField | null>(null);
   const [customFilterText, setCustomFilterText] = useState("");
+  const [debouncedCustomFilterText, setDebouncedCustomFilterText] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const titleTextRefs = useRef<Map<number, HTMLParagraphElement>>(new Map());
   const companyTextRefs = useRef<Map<number, HTMLParagraphElement>>(new Map());
   const [wrappedTitleIds, setWrappedTitleIds] = useState<Set<number>>(new Set());
   const [wrappedCompanyIds, setWrappedCompanyIds] = useState<Set<number>>(new Set());
+  // Guards against an older, slower request overwriting a newer one's result.
+  const requestIdRef = useRef(0);
 
   const isModalOpen = isAdding || editingId !== null || viewingId !== null || noteId !== null;
 
@@ -255,21 +219,113 @@ export function Dashboard() {
   const viewingApp = applications.find((a) => a.id === viewingId);
   const noteApp = applications.find((a) => a.id === noteId);
 
-  // Distinct existing values, offered as autocomplete suggestions in the form.
-  const suggestions = {
-    companies: [...new Set(applications.map((a) => a.company))].sort(),
-    titles: [...new Set(applications.map((a) => a.title))].sort(),
-    locations: [
-      ...new Set(applications.flatMap((a) => (a.location ? [a.location] : []))),
-    ].sort(),
-  };
+  const isFiltered =
+    Boolean(debouncedSearchQuery.trim()) ||
+    statusFilter !== null ||
+    typeFilter !== null ||
+    Boolean(appliedDateFrom) ||
+    Boolean(appliedDateTo) ||
+    (customFilterField !== null && Boolean(debouncedCustomFilterText.trim()));
+
+  function buildQuery(offset: number): ApplicationsQuery {
+    return {
+      limit: PAGE_SIZE,
+      offset,
+      q: debouncedSearchQuery.trim() || undefined,
+      status: statusFilter ?? undefined,
+      type: typeFilter ?? undefined,
+      date_applied_from: appliedDateFrom || undefined,
+      date_applied_to: appliedDateTo || undefined,
+      custom_field:
+        customFilterField && debouncedCustomFilterText.trim() ? customFilterField : undefined,
+      custom_value:
+        customFilterField && debouncedCustomFilterText.trim()
+          ? debouncedCustomFilterText.trim()
+          : undefined,
+      sort_field: sortField,
+      sort_dir: sortDir,
+    };
+  }
+
+  async function loadFirstPage() {
+    const requestId = ++requestIdRef.current;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const page = await getApplications(buildQuery(0));
+      if (requestIdRef.current !== requestId) return;
+      setApplications(page.items);
+      setTotal(page.total);
+      setHasMore(page.has_more);
+    } catch {
+      if (requestIdRef.current === requestId) setError("Could not load applications.");
+    } finally {
+      if (requestIdRef.current === requestId) setIsLoading(false);
+    }
+  }
+
+  async function loadMore() {
+    setIsLoadingMore(true);
+    try {
+      const page = await getApplications(buildQuery(applications.length));
+      setApplications((prev) => [...prev, ...page.items]);
+      setTotal(page.total);
+      setHasMore(page.has_more);
+    } catch {
+      setError("Could not load more applications.");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }
+
+  function refreshSuggestions() {
+    getApplicationSuggestions()
+      .then(setSuggestions)
+      .catch(() => {});
+  }
 
   useEffect(() => {
-    getApplications()
-      .then(setApplications)
-      .catch(() => setError("Could not load applications."))
-      .finally(() => setIsLoading(false));
+    refreshSuggestions();
   }, []);
+
+  // Refetches page one whenever search, a filter, or sort changes.
+  useEffect(() => {
+    // The synchronous setIsLoading/setError at the top of loadFirstPage
+    // (before its first await) is the standard "reset, then fetch" pattern
+    // for an effect whose dependencies change over the component's
+    // lifetime, not just on mount — react-hooks' newer set-state-in-effect
+    // rule flags any pre-await setState reached from an effect, including
+    // indirectly through a called function, so it fires here even though
+    // this isn't the external-store/subscription misuse the rule targets.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadFirstPage();
+    // loadFirstPage reads current filter/sort state via closure each call;
+    // listing it here would make every render redeclare a "new" dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    debouncedSearchQuery,
+    statusFilter,
+    typeFilter,
+    appliedDateFrom,
+    appliedDateTo,
+    customFilterField,
+    debouncedCustomFilterText,
+    sortField,
+    sortDir,
+  ]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearchQuery(searchQuery), DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const timeout = setTimeout(
+      () => setDebouncedCustomFilterText(customFilterText),
+      DEBOUNCE_MS,
+    );
+    return () => clearTimeout(timeout);
+  }, [customFilterText]);
 
   // Typing anywhere outside an input/modal reveals the search bar and seeds
   // it with the pressed key, like Gmail/Notion's quick-find.
@@ -311,80 +367,6 @@ export function Dashboard() {
     }
   }
 
-  const filteredApplications = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    let result = applications;
-
-    if (query) {
-      result = result.filter(
-        (a) =>
-          a.company.toLowerCase().includes(query) ||
-          a.title.toLowerCase().includes(query) ||
-          (a.location ?? "").toLowerCase().includes(query) ||
-          (a.notes ?? "").toLowerCase().includes(query),
-      );
-    }
-
-    if (statusFilter) {
-      result = result.filter((a) => a.status === statusFilter);
-    }
-
-    if (typeFilter) {
-      result = result.filter((a) => a.type === typeFilter);
-    }
-
-    if (appliedDateFrom) {
-      result = result.filter((a) => {
-        const date = a.date_applied?.slice(0, 10);
-        return date !== undefined && date >= appliedDateFrom;
-      });
-    }
-
-    if (appliedDateTo) {
-      result = result.filter((a) => {
-        const date = a.date_applied?.slice(0, 10);
-        return date !== undefined && date <= appliedDateTo;
-      });
-    }
-
-    if (customFilterField && customFilterText.trim()) {
-      const text = customFilterText.trim().toLowerCase();
-      result = result.filter((a) => {
-        const value =
-          customFilterField === "title"
-            ? a.title
-            : customFilterField === "company"
-              ? a.company
-              : a.location;
-        return (value ?? "").toLowerCase().includes(text);
-      });
-    }
-
-    return result;
-  }, [
-    applications,
-    searchQuery,
-    statusFilter,
-    typeFilter,
-    appliedDateFrom,
-    appliedDateTo,
-    customFilterField,
-    customFilterText,
-  ]);
-
-  const isFiltered =
-    Boolean(searchQuery.trim()) ||
-    statusFilter !== null ||
-    typeFilter !== null ||
-    Boolean(appliedDateFrom) ||
-    Boolean(appliedDateTo) ||
-    (customFilterField !== null && Boolean(customFilterText.trim()));
-
-  const sortedApplications = useMemo(
-    () => [...filteredApplications].sort((a, b) => compareApplications(a, b, sortField, sortDir)),
-    [filteredApplications, sortField, sortDir],
-  );
-
   // Title/Company are fixed-width, so wrapping only changes when the data does.
   useLayoutEffect(() => {
     const nextTitleWrapped = computeWrappedIds(titleTextRefs.current);
@@ -393,18 +375,20 @@ export function Dashboard() {
     setWrappedCompanyIds((prev) =>
       setsAreEqual(prev, nextCompanyWrapped) ? prev : nextCompanyWrapped,
     );
-  }, [filteredApplications]);
+  }, [applications]);
 
   async function handleAdd(data: Parameters<typeof createApplication>[0]) {
-    const application = await createApplication(data);
-    setApplications((prev) => [application, ...prev]);
+    await createApplication(data);
     setIsAdding(false);
+    await loadFirstPage();
+    refreshSuggestions();
   }
 
   async function handleEdit(id: number, data: Parameters<typeof updateApplication>[1]) {
     const updated = await updateApplication(id, data);
     setApplications((prev) => prev.map((a) => (a.id === id ? updated : a)));
     setEditingId(null);
+    refreshSuggestions();
   }
 
   async function handleSetStatus(app: ApplicationRead, status: ApplicationStatus) {
@@ -416,6 +400,7 @@ export function Dashboard() {
     if (!window.confirm("Delete this application?")) return;
     await deleteApplication(id);
     setApplications((prev) => prev.filter((a) => a.id !== id));
+    setTotal((prev) => Math.max(prev - 1, 0));
   }
 
   return (
@@ -427,9 +412,9 @@ export function Dashboard() {
             <Heading size="xl">Applications</Heading>
             <Text textStyle="sm" color="fg.muted">
               {user?.email} ·{" "}
-              {isFiltered
-                ? `${sortedApplications.length} of ${applications.length} application${applications.length === 1 ? "" : "s"}`
-                : `${applications.length} application${applications.length === 1 ? "" : "s"}`}
+              {applications.length < total
+                ? `${applications.length} of ${total} application${total === 1 ? "" : "s"}`
+                : `${total} application${total === 1 ? "" : "s"}`}
             </Text>
           </Box>
           <Button onClick={logout} variant="ghost" size="sm" color="fg.muted">
@@ -791,7 +776,7 @@ export function Dashboard() {
           </Alert.Root>
         )}
 
-        {!isLoading && !error && applications.length === 0 && (
+        {!isLoading && !error && total === 0 && !isFiltered && (
           <EmptyState.Root>
             <EmptyState.Content>
               <EmptyState.Indicator>
@@ -805,7 +790,7 @@ export function Dashboard() {
           </EmptyState.Root>
         )}
 
-        {!isLoading && !error && applications.length > 0 && sortedApplications.length === 0 && (
+        {!isLoading && !error && total === 0 && isFiltered && (
           <EmptyState.Root>
             <EmptyState.Content>
               <EmptyState.Indicator>
@@ -819,7 +804,8 @@ export function Dashboard() {
           </EmptyState.Root>
         )}
 
-        {!isLoading && !error && sortedApplications.length > 0 && (
+        {!isLoading && !error && total > 0 && (
+          <>
           <Card.Root overflow="hidden" w="full" maxW="750px" mx="auto">
             <Table.ScrollArea>
               <Table.Root
@@ -841,7 +827,7 @@ export function Dashboard() {
                 </Table.Row>
               </Table.Header>
               <Table.Body>
-                {sortedApplications.map((app, index) => (
+                {applications.map((app, index) => (
                   <Table.Row
                       key={app.id}
                       className="group"
@@ -982,6 +968,21 @@ export function Dashboard() {
               </Table.Root>
             </Table.ScrollArea>
           </Card.Root>
+
+          {hasMore && (
+            <Flex justify="center" mt="4">
+              <Button
+                onClick={loadMore}
+                loading={isLoadingMore}
+                variant="outline"
+                size="sm"
+                color="fg.muted"
+              >
+                Load More
+              </Button>
+            </Flex>
+          )}
+          </>
         )}
       </Container>
     </Box>
