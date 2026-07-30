@@ -52,7 +52,7 @@ import { ApplicationForm } from "../components/ApplicationForm";
 import { ApplicationDetails } from "../components/ApplicationDetails";
 import { NoteDialog } from "../components/NoteDialog";
 import { ApplicationStatus, ApplicationType } from "../index";
-import type { ApplicationRead, ApplicationSuggestions, ApplicationsQuery } from "../index";
+import type { ApplicationRead, ApplicationSuggestions, ApplicationsQuery, UserRead } from "../index";
 
 const PAGE_SIZE = 20;
 const DEBOUNCE_MS = 300;
@@ -240,9 +240,91 @@ function isSortDir(value: string): value is SortDir {
   return value === "asc" || value === "desc";
 }
 
+function isApplicationStatus(value: string): value is ApplicationStatus {
+  return (Object.values(ApplicationStatus) as string[]).includes(value);
+}
+
+function isApplicationType(value: string): value is ApplicationType {
+  return (Object.values(ApplicationType) as string[]).includes(value);
+}
+
+interface PersistedFilters {
+  sortField: SortField;
+  sortDir: SortDir;
+  statusFilter: ApplicationStatus | null;
+  typeFilter: ApplicationType | null;
+  appliedDateFrom: string;
+  appliedDateTo: string;
+  advancedFilterTitles: string[];
+  advancedFilterCompanies: string[];
+  advancedFilterLocations: string[];
+  searchQuery: string;
+}
+
+function filtersStorageKey(userId: number): string {
+  return `applications-filters:${userId}`;
+}
+
+// Restores the last-used filters/sort from localStorage (falling back to the
+// user's saved defaults for sort) so a page reload doesn't reset the view.
+// Values are validated individually since the stored JSON could be stale
+// (e.g. a status renamed since it was written) or absent.
+function loadPersistedFilters(user: UserRead | null): PersistedFilters {
+  const defaultSortField: SortField =
+    user && isSortField(user.default_sort_field) ? user.default_sort_field : "created_at";
+  const defaultSortDir: SortDir =
+    user && isSortDir(user.default_sort_dir) ? user.default_sort_dir : "desc";
+  const fallback: PersistedFilters = {
+    sortField: defaultSortField,
+    sortDir: defaultSortDir,
+    statusFilter: null,
+    typeFilter: null,
+    appliedDateFrom: "",
+    appliedDateTo: "",
+    advancedFilterTitles: [],
+    advancedFilterCompanies: [],
+    advancedFilterLocations: [],
+    searchQuery: "",
+  };
+  if (!user) return fallback;
+  try {
+    const raw = localStorage.getItem(filtersStorageKey(user.id));
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return {
+      sortField: isSortField(parsed.sortField) ? parsed.sortField : fallback.sortField,
+      sortDir: isSortDir(parsed.sortDir) ? parsed.sortDir : fallback.sortDir,
+      statusFilter:
+        typeof parsed.statusFilter === "string" && isApplicationStatus(parsed.statusFilter)
+          ? parsed.statusFilter
+          : null,
+      typeFilter:
+        typeof parsed.typeFilter === "string" && isApplicationType(parsed.typeFilter)
+          ? parsed.typeFilter
+          : null,
+      appliedDateFrom: typeof parsed.appliedDateFrom === "string" ? parsed.appliedDateFrom : "",
+      appliedDateTo: typeof parsed.appliedDateTo === "string" ? parsed.appliedDateTo : "",
+      advancedFilterTitles: Array.isArray(parsed.advancedFilterTitles)
+        ? parsed.advancedFilterTitles
+        : [],
+      advancedFilterCompanies: Array.isArray(parsed.advancedFilterCompanies)
+        ? parsed.advancedFilterCompanies
+        : [],
+      advancedFilterLocations: Array.isArray(parsed.advancedFilterLocations)
+        ? parsed.advancedFilterLocations
+        : [],
+      searchQuery: typeof parsed.searchQuery === "string" ? parsed.searchQuery : "",
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 export function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  // Read once on mount to seed the filter/sort state declared below.
+  const [persistedFilters] = useState<PersistedFilters>(() => loadPersistedFilters(user));
   const [applications, setApplications] = useState<ApplicationRead[]>([]);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -254,22 +336,30 @@ export function Dashboard() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [viewingId, setViewingId] = useState<number | null>(null);
   const [noteId, setNoteId] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
-  const [isSearchVisible, setIsSearchVisible] = useState(false);
-  const [sortField, setSortField] = useState<SortField>(() =>
-    user && isSortField(user.default_sort_field) ? user.default_sort_field : "created_at"
+  const [searchQuery, setSearchQuery] = useState(() => persistedFilters.searchQuery);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(
+    () => persistedFilters.searchQuery
   );
-  const [sortDir, setSortDir] = useState<SortDir>(() =>
-    user && isSortDir(user.default_sort_dir) ? user.default_sort_dir : "desc"
+  const [isSearchVisible, setIsSearchVisible] = useState(() => Boolean(persistedFilters.searchQuery));
+  const [sortField, setSortField] = useState<SortField>(() => persistedFilters.sortField);
+  const [sortDir, setSortDir] = useState<SortDir>(() => persistedFilters.sortDir);
+  const [statusFilter, setStatusFilter] = useState<ApplicationStatus | null>(
+    () => persistedFilters.statusFilter
   );
-  const [statusFilter, setStatusFilter] = useState<ApplicationStatus | null>(null);
-  const [typeFilter, setTypeFilter] = useState<ApplicationType | null>(null);
-  const [appliedDateFrom, setAppliedDateFrom] = useState("");
-  const [appliedDateTo, setAppliedDateTo] = useState("");
-  const [advancedFilterTitles, setAdvancedFilterTitles] = useState<string[]>([]);
-  const [advancedFilterCompanies, setAdvancedFilterCompanies] = useState<string[]>([]);
-  const [advancedFilterLocations, setAdvancedFilterLocations] = useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = useState<ApplicationType | null>(
+    () => persistedFilters.typeFilter
+  );
+  const [appliedDateFrom, setAppliedDateFrom] = useState(() => persistedFilters.appliedDateFrom);
+  const [appliedDateTo, setAppliedDateTo] = useState(() => persistedFilters.appliedDateTo);
+  const [advancedFilterTitles, setAdvancedFilterTitles] = useState<string[]>(
+    () => persistedFilters.advancedFilterTitles
+  );
+  const [advancedFilterCompanies, setAdvancedFilterCompanies] = useState<string[]>(
+    () => persistedFilters.advancedFilterCompanies
+  );
+  const [advancedFilterLocations, setAdvancedFilterLocations] = useState<string[]>(
+    () => persistedFilters.advancedFilterLocations
+  );
   const [advancedFilterSearch, setAdvancedFilterSearch] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const titleTextRefs = useRef<Map<number, HTMLParagraphElement>>(new Map());
@@ -387,6 +477,41 @@ export function Dashboard() {
     const timeout = setTimeout(() => setDebouncedSearchQuery(searchQuery), DEBOUNCE_MS);
     return () => clearTimeout(timeout);
   }, [searchQuery]);
+
+  // Persists the current filters/sort so a reload picks up where the user
+  // left off, instead of resetting to the account-level defaults every time.
+  useEffect(() => {
+    if (!user) return;
+    const toStore: PersistedFilters = {
+      sortField,
+      sortDir,
+      statusFilter,
+      typeFilter,
+      appliedDateFrom,
+      appliedDateTo,
+      advancedFilterTitles,
+      advancedFilterCompanies,
+      advancedFilterLocations,
+      searchQuery: debouncedSearchQuery,
+    };
+    try {
+      localStorage.setItem(filtersStorageKey(user.id), JSON.stringify(toStore));
+    } catch {
+      // Best-effort — localStorage may be unavailable (private browsing, quota).
+    }
+  }, [
+    user,
+    sortField,
+    sortDir,
+    statusFilter,
+    typeFilter,
+    appliedDateFrom,
+    appliedDateTo,
+    advancedFilterTitles,
+    advancedFilterCompanies,
+    advancedFilterLocations,
+    debouncedSearchQuery,
+  ]);
 
   // Typing anywhere outside an input/modal reveals the search bar and seeds
   // it with the pressed key, like Gmail/Notion's quick-find.
@@ -671,7 +796,7 @@ export function Dashboard() {
                 color={hasAdvancedFilter ? "fg" : "fg.muted"}
                 rounded="full"
                 h="7"
-              >
+                  >
                     Advanced
                     <LuChevronDown />
               </Button>
@@ -790,7 +915,7 @@ export function Dashboard() {
                     </Menu.Item>
                     <Menu.Separator />
                     <Menu.Item value="created_at">
-                      Creation (Default)
+                      Date Added (Default)
                       {sortField === "created_at" && <LuCheck />}
                     </Menu.Item>
                     {(Object.keys(SORT_MENU_FIELD_LABELS) as Exclude<SortField, "created_at">[]).map(
