@@ -8,6 +8,9 @@ const client = axios.create({
   headers: { "Content-Type": "application/json" },
   // Send the httpOnly refresh cookie on /auth requests.
   withCredentials: true,
+  // Array params as repeated bare keys (?a=1&a=2) instead of axios's
+  // default a[]=1&a[]=2 — matches what FastAPI's list query params expect.
+  paramsSerializer: { indexes: null },
 });
 
 // Attach JWT to every outgoing request.

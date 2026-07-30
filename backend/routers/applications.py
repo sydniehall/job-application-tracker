@@ -24,7 +24,6 @@ router = APIRouter(prefix="/applications", tags=["applications"])
 SortField = Literal[
     "created_at", "title", "company", "status", "location", "type", "date_applied", "deadline"
 ]
-CustomFilterField = Literal["title", "company", "location"]
 
 # Funnel order rather than alphabetical, matching how the status badge cycles.
 STATUS_SORT_ORDER = {
@@ -51,11 +50,6 @@ SORT_COLUMNS = {
     "deadline": Application.deadline,
 }
 
-CUSTOM_FILTER_COLUMNS = {
-    "title": Application.title,
-    "company": Application.company,
-    "location": Application.location,
-}
 
 
 @router.post("", response_model=ApplicationRead, status_code=201)
@@ -110,8 +104,9 @@ def get_applications(
     type: Optional[ApplicationType] = None,
     date_applied_from: Optional[date] = None,
     date_applied_to: Optional[date] = None,
-    custom_field: Optional[CustomFilterField] = None,
-    custom_value: Optional[str] = None,
+    titles: list[str] = Query(default=[]),
+    companies: list[str] = Query(default=[]),
+    locations: list[str] = Query(default=[]),
     sort_field: SortField = "created_at",
     sort_dir: Literal["asc", "desc"] = "desc",
     db: Session = Depends(get_db),
@@ -146,9 +141,15 @@ def get_applications(
             Application.date_applied <= datetime.combine(date_applied_to, time.max)
         )
 
-    if custom_field and custom_value:
-        column = CUSTOM_FILTER_COLUMNS[custom_field]
-        query = query.where(column.ilike(f"%{custom_value}%"))
+    # Values are picked from the existing distinct-value suggestions, so an
+    # exact match (not substring) is correct here; multiple selections
+    # within a field OR together, matching typical faceted-filter UX.
+    if titles:
+        query = query.where(Application.title.in_(titles))
+    if companies:
+        query = query.where(Application.company.in_(companies))
+    if locations:
+        query = query.where(Application.location.in_(locations))
 
     total = db.exec(select(func.count()).select_from(query.subquery())).one()
 

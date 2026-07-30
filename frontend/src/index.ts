@@ -85,8 +85,6 @@ export type ApplicationSortField =
   | "date_applied"
   | "deadline";
 
-export type ApplicationCustomFilterField = "title" | "company" | "location";
-
 export interface ApplicationsQuery {
   limit: number;
   offset: number;
@@ -95,8 +93,9 @@ export interface ApplicationsQuery {
   type?: ApplicationType;
   date_applied_from?: string;
   date_applied_to?: string;
-  custom_field?: ApplicationCustomFilterField;
-  custom_value?: string;
+  titles?: string[];
+  companies?: string[];
+  locations?: string[];
   sort_field?: ApplicationSortField;
   sort_dir?: "asc" | "desc";
 }

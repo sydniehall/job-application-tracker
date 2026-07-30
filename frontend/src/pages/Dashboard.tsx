@@ -113,14 +113,60 @@ function hasHeaderArrow(field: SortField): boolean {
 const ALL_STATUSES = "__all__";
 const ALL_TYPES = "__all_types__";
 
-type CustomFilterField = "title" | "company" | "location";
-const NO_CUSTOM_FILTER = "__none__";
+function toggleSelection(current: string[], value: string): string[] {
+  return current.includes(value)
+    ? current.filter((v) => v !== value)
+    : [...current, value];
+}
 
-const CUSTOM_FILTER_LABELS: Record<CustomFilterField, string> = {
-  title: "Title",
-  company: "Company",
-  location: "Location",
-};
+interface FilterCategoryListProps {
+  label: string;
+  options: string[];
+  selected: string[];
+  onToggle: (value: string) => void;
+}
+
+// A checkable list within the advanced-filter popover; clicking an item
+// toggles it without closing the popover, so multiple values (and multiple
+// categories) can be picked in one pass.
+function FilterCategoryList({ label, options, selected, onToggle }: FilterCategoryListProps) {
+  return (
+    <Box>
+      <Text textStyle="xs" color="fg.muted" mb="1">
+        {label}
+      </Text>
+      {options.length === 0 ? (
+        <Text textStyle="xs" color="fg.subtle">
+          No matches
+        </Text>
+      ) : (
+        <Flex direction="column" maxH="120px" overflowY="auto" gap="0.5">
+          {options.map((value) => (
+            <Flex
+              key={value}
+              as="button"
+              onClick={() => onToggle(value)}
+              align="center"
+              justify="space-between"
+              gap="2"
+              px="2"
+              py="1"
+              rounded="md"
+              textAlign="left"
+              bg={selected.includes(value) ? "blue.subtle" : "transparent"}
+              _hover={{ bg: selected.includes(value) ? "blue.subtle" : "bg.subtle" }}
+            >
+              <Text textStyle="sm" truncate>
+                {value}
+              </Text>
+              {selected.includes(value) && <LuCheck size={14} />}
+            </Flex>
+          ))}
+        </Flex>
+      )}
+    </Box>
+  );
+}
 
 interface SortableHeaderProps {
   label: string;
@@ -202,9 +248,10 @@ export function Dashboard() {
   const [typeFilter, setTypeFilter] = useState<ApplicationType | null>(null);
   const [appliedDateFrom, setAppliedDateFrom] = useState("");
   const [appliedDateTo, setAppliedDateTo] = useState("");
-  const [customFilterField, setCustomFilterField] = useState<CustomFilterField | null>(null);
-  const [customFilterText, setCustomFilterText] = useState("");
-  const [debouncedCustomFilterText, setDebouncedCustomFilterText] = useState("");
+  const [advancedFilterTitles, setAdvancedFilterTitles] = useState<string[]>([]);
+  const [advancedFilterCompanies, setAdvancedFilterCompanies] = useState<string[]>([]);
+  const [advancedFilterLocations, setAdvancedFilterLocations] = useState<string[]>([]);
+  const [advancedFilterSearch, setAdvancedFilterSearch] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const titleTextRefs = useRef<Map<number, HTMLParagraphElement>>(new Map());
   const companyTextRefs = useRef<Map<number, HTMLParagraphElement>>(new Map());
@@ -219,13 +266,18 @@ export function Dashboard() {
   const viewingApp = applications.find((a) => a.id === viewingId);
   const noteApp = applications.find((a) => a.id === noteId);
 
+  const hasAdvancedFilter =
+    advancedFilterTitles.length > 0 ||
+    advancedFilterCompanies.length > 0 ||
+    advancedFilterLocations.length > 0;
+
   const isFiltered =
     Boolean(debouncedSearchQuery.trim()) ||
     statusFilter !== null ||
     typeFilter !== null ||
     Boolean(appliedDateFrom) ||
     Boolean(appliedDateTo) ||
-    (customFilterField !== null && Boolean(debouncedCustomFilterText.trim()));
+    hasAdvancedFilter;
 
   function buildQuery(offset: number): ApplicationsQuery {
     return {
@@ -236,12 +288,9 @@ export function Dashboard() {
       type: typeFilter ?? undefined,
       date_applied_from: appliedDateFrom || undefined,
       date_applied_to: appliedDateTo || undefined,
-      custom_field:
-        customFilterField && debouncedCustomFilterText.trim() ? customFilterField : undefined,
-      custom_value:
-        customFilterField && debouncedCustomFilterText.trim()
-          ? debouncedCustomFilterText.trim()
-          : undefined,
+      titles: advancedFilterTitles.length > 0 ? advancedFilterTitles : undefined,
+      companies: advancedFilterCompanies.length > 0 ? advancedFilterCompanies : undefined,
+      locations: advancedFilterLocations.length > 0 ? advancedFilterLocations : undefined,
       sort_field: sortField,
       sort_dir: sortDir,
     };
@@ -308,8 +357,9 @@ export function Dashboard() {
     typeFilter,
     appliedDateFrom,
     appliedDateTo,
-    customFilterField,
-    debouncedCustomFilterText,
+    advancedFilterTitles,
+    advancedFilterCompanies,
+    advancedFilterLocations,
     sortField,
     sortDir,
   ]);
@@ -318,14 +368,6 @@ export function Dashboard() {
     const timeout = setTimeout(() => setDebouncedSearchQuery(searchQuery), DEBOUNCE_MS);
     return () => clearTimeout(timeout);
   }, [searchQuery]);
-
-  useEffect(() => {
-    const timeout = setTimeout(
-      () => setDebouncedCustomFilterText(customFilterText),
-      DEBOUNCE_MS,
-    );
-    return () => clearTimeout(timeout);
-  }, [customFilterText]);
 
   // Typing anywhere outside an input/modal reveals the search bar and seeds
   // it with the pressed key, like Gmail/Notion's quick-find.
@@ -596,49 +638,81 @@ export function Dashboard() {
             </Portal>
           </Popover.Root>
 
-          <Menu.Root
-            positioning={{ placement: "bottom-start" }}
-            onSelect={(e) => {
-              setCustomFilterText("");
-              setCustomFilterField(e.value === NO_CUSTOM_FILTER ? null : (e.value as CustomFilterField));
-            }}
-          >
-            <Menu.Trigger asChild>
+          <Popover.Root positioning={{ placement: "bottom-start" }}>
+            <Popover.Trigger asChild>
               <Button
-                title={customFilterField ? `Filter: ${CUSTOM_FILTER_LABELS[customFilterField]}` : "Add filter"}
-                variant="ghost"
+                title="Advanced filter"
+                variant="outline"
                 size="sm"
-                color={customFilterField ? "fg" : "fg.muted"}
+                color={hasAdvancedFilter ? "fg" : "fg.muted"}
                 rounded="full"
                 h="7"
-                px="2"
               >
-                {customFilterField ? (
-                  `Filter: ${CUSTOM_FILTER_LABELS[customFilterField]}`
-                ) : (
-                  <>
-                    Add Filter
-                  </>
-                )}
+                    Advanced
+                    <LuChevronDown />
               </Button>
-            </Menu.Trigger>
+            </Popover.Trigger>
             <Portal>
-              <Menu.Positioner>
-                <Menu.Content>
-                  <Menu.Item value={NO_CUSTOM_FILTER}>
-                    None
-                    {!customFilterField && <LuCheck />}
-                  </Menu.Item>
-                  {(Object.keys(CUSTOM_FILTER_LABELS) as CustomFilterField[]).map((field) => (
-                    <Menu.Item key={field} value={field}>
-                      {CUSTOM_FILTER_LABELS[field]}
-                      {customFilterField === field && <LuCheck />}
-                    </Menu.Item>
-                  ))}
-                </Menu.Content>
-              </Menu.Positioner>
+              <Popover.Positioner>
+                <Popover.Content minW="260px">
+                  <Popover.Body>
+                    <Flex direction="column" gap="3">
+                      <Input
+                        value={advancedFilterSearch}
+                        onChange={(e) => setAdvancedFilterSearch(e.target.value)}
+                        placeholder="Search titles, companies, locations..."
+                        size="sm"
+                      />
+                      <FilterCategoryList
+                        label="Titles"
+                        options={suggestions.titles.filter((t) =>
+                          t.toLowerCase().includes(advancedFilterSearch.trim().toLowerCase()),
+                        )}
+                        selected={advancedFilterTitles}
+                        onToggle={(value) =>
+                          setAdvancedFilterTitles((prev) => toggleSelection(prev, value))
+                        }
+                      />
+                      <FilterCategoryList
+                        label="Companies"
+                        options={suggestions.companies.filter((c) =>
+                          c.toLowerCase().includes(advancedFilterSearch.trim().toLowerCase()),
+                        )}
+                        selected={advancedFilterCompanies}
+                        onToggle={(value) =>
+                          setAdvancedFilterCompanies((prev) => toggleSelection(prev, value))
+                        }
+                      />
+                      <FilterCategoryList
+                        label="Locations"
+                        options={suggestions.locations.filter((l) =>
+                          l.toLowerCase().includes(advancedFilterSearch.trim().toLowerCase()),
+                        )}
+                        selected={advancedFilterLocations}
+                        onToggle={(value) =>
+                          setAdvancedFilterLocations((prev) => toggleSelection(prev, value))
+                        }
+                      />
+                      {hasAdvancedFilter && (
+                        <Button
+                          onClick={() => {
+                            setAdvancedFilterTitles([]);
+                            setAdvancedFilterCompanies([]);
+                            setAdvancedFilterLocations([]);
+                          }}
+                          variant="ghost"
+                          size="xs"
+                          color="fg.muted"
+                        >
+                          <LuX /> Clear
+                        </Button>
+                      )}
+                    </Flex>
+                  </Popover.Body>
+                </Popover.Content>
+              </Popover.Positioner>
             </Portal>
-          </Menu.Root>
+          </Popover.Root>
 
           <Flex gap="2" ml="auto">
             {sortField !== "created_at" && (
@@ -653,7 +727,7 @@ export function Dashboard() {
                 rounded="full"
                 h="7"
               >
-                Sort by Creation
+                Revert Sort
               </Button>
             )}
 
@@ -709,17 +783,6 @@ export function Dashboard() {
             </Menu.Root>
           </Flex>
         </Flex>
-
-        {customFilterField && (
-          <Input
-            value={customFilterText}
-            onChange={(e) => setCustomFilterText(e.target.value)}
-            placeholder={`Filter by ${CUSTOM_FILTER_LABELS[customFilterField].toLowerCase()}...`}
-            size="sm"
-            maxW="220px"
-            mt="2"
-          />
-        )}
         </Box>
         </Box>
 
