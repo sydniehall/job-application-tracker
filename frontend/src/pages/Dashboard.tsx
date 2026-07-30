@@ -34,9 +34,11 @@ import {
   LuPlus,
   LuSearch,
   LuSearchX,
+  LuSettings,
   LuTrash2,
   LuX,
 } from "react-icons/lu";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   createApplication,
@@ -226,8 +228,21 @@ function setsAreEqual(a: Set<number>, b: Set<number>): boolean {
   return true;
 }
 
+const SORT_FIELDS: SortField[] = [
+  "created_at", "title", "company", "status", "location", "type", "date_applied", "deadline",
+];
+
+function isSortField(value: string): value is SortField {
+  return (SORT_FIELDS as string[]).includes(value);
+}
+
+function isSortDir(value: string): value is SortDir {
+  return value === "asc" || value === "desc";
+}
+
 export function Dashboard() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [applications, setApplications] = useState<ApplicationRead[]>([]);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -242,8 +257,12 @@ export function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [isSearchVisible, setIsSearchVisible] = useState(false);
-  const [sortField, setSortField] = useState<SortField>("created_at");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [sortField, setSortField] = useState<SortField>(() =>
+    user && isSortField(user.default_sort_field) ? user.default_sort_field : "created_at"
+  );
+  const [sortDir, setSortDir] = useState<SortDir>(() =>
+    user && isSortDir(user.default_sort_dir) ? user.default_sort_dir : "desc"
+  );
   const [statusFilter, setStatusFilter] = useState<ApplicationStatus | null>(null);
   const [typeFilter, setTypeFilter] = useState<ApplicationType | null>(null);
   const [appliedDateFrom, setAppliedDateFrom] = useState("");
@@ -459,9 +478,14 @@ export function Dashboard() {
                 : `${total} application${total === 1 ? "" : "s"}`}
             </Text>
           </Box>
-          <Button onClick={logout} variant="ghost" size="sm" color="fg.muted">
-            <LuLogOut /> Log out
-          </Button>
+          <Flex gap="2">
+            <Button onClick={() => navigate("/account")} variant="ghost" size="sm" color="fg.muted">
+              <LuSettings /> Account
+            </Button>
+            <Button onClick={logout} variant="ghost" size="sm" color="fg.muted">
+              <LuLogOut /> Log out
+            </Button>
+          </Flex>
         </Flex>
 
         {isSearchVisible && (
@@ -793,6 +817,8 @@ export function Dashboard() {
             onSubmit={handleAdd}
             onCancel={() => setIsAdding(false)}
             suggestions={suggestions}
+            defaultType={user?.default_application_type}
+            defaultCurrency={user?.default_currency}
           />
         )}
 

@@ -1,6 +1,13 @@
 import client from "./client";
 import { token } from "./token";
-import type { DeleteAccount, Token, UserCreate, UserRead } from "../index";
+import type {
+  ChangePasswordRequest,
+  DeleteAccount,
+  Token,
+  UserCreate,
+  UserRead,
+  UserSettingsUpdate,
+} from "../index";
 
 export async function register(data: UserCreate): Promise<UserRead> {
   const res = await client.post<UserRead>("/auth/register", data);
@@ -21,6 +28,15 @@ export async function login(email: string, password: string): Promise<Token> {
 export async function getMe(): Promise<UserRead> {
   const res = await client.get<UserRead>("/auth/me");
   return res.data;
+}
+
+export async function updateSettings(data: UserSettingsUpdate): Promise<UserRead> {
+  const res = await client.put<UserRead>("/auth/me", data);
+  return res.data;
+}
+
+export async function changePassword(data: ChangePasswordRequest): Promise<void> {
+  await client.post("/auth/change-password", data);
 }
 
 // Axios sends DELETE body via the `data` config key, not as the second argument.

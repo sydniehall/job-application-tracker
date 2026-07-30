@@ -34,6 +34,16 @@ class User(SQLModel, table=True):
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
+    default_currency: str = Field(default="$")
+    default_application_type: Optional[ApplicationType] = Field(
+        default=None,
+        sa_column=Column(
+            SAEnum(ApplicationType, values_callable=lambda enum: [e.value for e in enum]),
+            nullable=True,
+        ),
+    )
+    default_sort_field: str = Field(default="created_at")
+    default_sort_dir: str = Field(default="desc")
 
     applications: List["Application"] = Relationship(
         back_populates="owner",
@@ -119,6 +129,22 @@ class UserRead(SQLModel):
     id: int
     email: str
     created_at: Optional[datetime]
+    default_currency: str
+    default_application_type: Optional[ApplicationType]
+    default_sort_field: str
+    default_sort_dir: str
+
+
+class UserSettingsUpdate(SQLModel):
+    default_currency: Optional[str] = None
+    default_application_type: Optional[ApplicationType] = None
+    default_sort_field: Optional[str] = None
+    default_sort_dir: Optional[str] = None
+
+
+class ChangePassword(SQLModel):
+    current_password: str
+    new_password: str
 
 
 class ApplicationCreate(SQLModel):

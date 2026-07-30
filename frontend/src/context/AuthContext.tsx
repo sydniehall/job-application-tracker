@@ -6,9 +6,10 @@ import {
   login as apiLogin,
   logout as apiLogout,
   register as apiRegister,
+  updateSettings as apiUpdateSettings,
 } from "../api/auth";
 import { token } from "../api/token";
-import type { DeleteAccount, UserCreate, UserRead } from "../index";
+import type { DeleteAccount, UserCreate, UserRead, UserSettingsUpdate } from "../index";
 
 interface AuthState {
   user: UserRead | null;
@@ -20,6 +21,7 @@ interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   deleteAccount: (data: DeleteAccount) => Promise<void>;
+  updateSettings: (data: UserSettingsUpdate) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -58,8 +60,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ user: null, isLoading: false });
   }
 
+  async function updateSettings(data: UserSettingsUpdate) {
+    const user = await apiUpdateSettings(data);
+    setState((prev) => ({ ...prev, user }));
+  }
+
   return (
-    <AuthContext.Provider value={{ ...state, register, login, logout, deleteAccount }}>
+    <AuthContext.Provider
+      value={{ ...state, register, login, logout, deleteAccount, updateSettings }}
+    >
       {children}
     </AuthContext.Provider>
   );

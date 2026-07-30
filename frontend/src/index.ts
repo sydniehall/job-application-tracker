@@ -29,6 +29,22 @@ export interface UserRead {
   id: number;
   email: string;
   created_at: string | null;
+  default_currency: string;
+  default_application_type: ApplicationType | null;
+  default_sort_field: string;
+  default_sort_dir: string;
+}
+
+export interface UserSettingsUpdate {
+  default_currency?: string;
+  default_application_type?: ApplicationType | null;
+  default_sort_field?: string;
+  default_sort_dir?: string;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
 }
 
 export interface ApplicationCreate {

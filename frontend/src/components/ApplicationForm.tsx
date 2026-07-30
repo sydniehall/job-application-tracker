@@ -33,6 +33,10 @@ interface ApplicationFormProps {
   onCancel: () => void;
   onDelete?: () => void;
   suggestions?: FieldSuggestions;
+  // Only applied when `initial` isn't set (i.e. adding a new application) —
+  // an edit should always reflect the application's own saved values.
+  defaultType?: ApplicationType | null;
+  defaultCurrency?: string;
 }
 
 // Local date as YYYY-MM-DD (toISOString would give the UTC date, which is
@@ -49,6 +53,8 @@ export function ApplicationForm({
   onCancel,
   onDelete,
   suggestions,
+  defaultType,
+  defaultCurrency,
 }: ApplicationFormProps) {
   const [url, setUrl] = useState(initial?.url ?? "");
   const [company, setCompany] = useState(initial?.company ?? "");
@@ -58,7 +64,10 @@ export function ApplicationForm({
   const [status, setStatus] = useState<ApplicationStatus>(
     initial?.status ?? ApplicationStatus.Applied
   );
-  const [type, setType] = useState<ApplicationType | "">(initial?.type ?? "");
+  const [type, setType] = useState<ApplicationType | "">(
+    initial ? initial.type ?? "" : defaultType ?? ""
+  );
+  const currencyPrefix = defaultCurrency || "$";
   const [dateApplied, setDateApplied] = useState(
     () => initial?.date_applied?.split("T")[0] ?? localToday()
   );
@@ -182,12 +191,13 @@ export function ApplicationForm({
                       placeholder="e.g. $25/hr or $110k"
                       value={pay}
                       onChange={(e) => setPay(e.target.value)}
-                      // Start with "$" on focus; drop it again if left alone.
+                      // Start with the user's default currency symbol on
+                      // focus; drop it again if left alone.
                       onFocus={() => {
-                        if (!pay) setPay("$");
+                        if (!pay) setPay(currencyPrefix);
                       }}
                       onBlur={() => {
-                        if (pay === "$") setPay("");
+                        if (pay === currencyPrefix) setPay("");
                       }}
                     />
                   </Field.Root>
