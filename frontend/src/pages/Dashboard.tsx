@@ -945,6 +945,7 @@ export function Dashboard() {
           color="fg.muted"
           justifyContent="center"
           _hover={{ color: "blue.fg", borderColor: "blue.emphasized" }}
+          _focusVisible={{ outline: "none", boxShadow: "none" }}
         >
           <LuPlus /> Add Application
         </Button>
@@ -1317,11 +1318,11 @@ export function Dashboard() {
                         >
                           {sortDir === "asc" ? (
                             <>
-                              Sort Ascending <LuArrowUp />
+                              Sort ascending <LuArrowUp />
                             </>
                           ) : (
                             <>
-                              Sort Descending <LuArrowDown />
+                              Sort descending <LuArrowDown />
                             </>
                           )}
                         </Button>
