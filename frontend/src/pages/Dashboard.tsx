@@ -8,7 +8,6 @@ import {
   Container,
   EmptyState,
   Flex,
-  Heading,
   IconButton,
   Input,
   Link,
@@ -23,19 +22,24 @@ import {
   LuArrowDown,
   LuArrowUp,
   LuArrowUpDown,
-  LuBan,
+  LuBriefcase,
   LuCheck,
   LuChevronDown,
-  LuDollarSign,
+  LuChevronsUpDown,
+  LuCircleX,
   LuExternalLink,
   LuInbox,
   LuInfo,
+  LuListFilter,
   LuLogOut,
   LuPlus,
+  LuRotateCcw,
   LuSearch,
   LuSearchX,
   LuSettings,
   LuTrash2,
+  LuTrophy,
+  LuUser,
   LuX,
 } from "react-icons/lu";
 import { useNavigate } from "react-router-dom";
@@ -47,12 +51,29 @@ import {
   getApplications,
   updateApplication,
 } from "../api/applications";
+import {
+  createJobSearch,
+  deleteJobSearch,
+  getJobSearches,
+  updateJobSearch,
+} from "../api/jobSearches";
 import { StatusBadge } from "../components/StatusBadge";
 import { ApplicationForm } from "../components/ApplicationForm";
 import { ApplicationDetails } from "../components/ApplicationDetails";
 import { NoteDialog } from "../components/NoteDialog";
+import { CreateJobSearchDialog } from "../components/CreateJobSearchDialog";
+import { ManageJobSearchesDialog } from "../components/ManageJobSearchesDialog";
 import { ApplicationStatus, ApplicationType } from "../index";
-import type { ApplicationRead, ApplicationSuggestions, ApplicationsQuery, UserRead } from "../index";
+import type {
+  ApplicationCreate,
+  ApplicationRead,
+  ApplicationSuggestions,
+  ApplicationsQuery,
+  JobSearchCreate,
+  JobSearchRead,
+  JobSearchUpdate,
+  UserRead,
+} from "../index";
 
 const PAGE_SIZE = 20;
 const DEBOUNCE_MS = 300;
@@ -96,7 +117,7 @@ type SortDir = "asc" | "desc";
 // Every sortable field except the default ("created_at" has no menu entry;
 // it's reached via the "Sort by creation" reset button instead).
 const SORT_MENU_FIELD_LABELS: Record<Exclude<SortField, "created_at">, string> = {
-  title: "Title",
+  title: "Job Title",
   company: "Company",
   status: "Status",
   location: "Location",
@@ -105,15 +126,10 @@ const SORT_MENU_FIELD_LABELS: Record<Exclude<SortField, "created_at">, string> =
   deadline: "Deadline",
 };
 
-// These fields also have their own sortable table header, which already
-// shows the active direction — the Sort button stays generic for them
-// instead of duplicating that state.
-function hasHeaderArrow(field: SortField): boolean {
-  return field === "title" || field === "company" || field === "status";
-}
-
 const ALL_STATUSES = "__all__";
 const ALL_TYPES = "__all_types__";
+const NEW_JOB_SEARCH = "__new__";
+const MANAGE_JOB_SEARCHES = "__manage__";
 
 function toggleSelection(current: string[], value: string): string[] {
   return current.includes(value)
@@ -167,6 +183,66 @@ function FilterCategoryList({ label, options, selected, onToggle }: FilterCatego
         </Flex>
       )}
     </Box>
+  );
+}
+
+interface AdvancedFilterCategoryPopoverProps {
+  label: string;
+  options: string[];
+  selected: string[];
+  onToggle: (value: string) => void;
+}
+
+// A category button within the "Advanced" filter popover. The full option
+// list stays hidden behind this trigger until clicked, so the advanced
+// filter panel itself only ever shows three compact buttons.
+function AdvancedFilterCategoryPopover({
+  label,
+  options,
+  selected,
+  onToggle,
+}: AdvancedFilterCategoryPopoverProps) {
+  const [search, setSearch] = useState("");
+
+  return (
+    <Popover.Root positioning={{ placement: "right-start" }}>
+      <Popover.Trigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          color={selected.length > 0 ? "blue.500" : "fg.muted"}
+          justifyContent="space-between"
+        >
+          {label}
+          {selected.length > 0 ? ` (${selected.length})` : ""}
+          <LuChevronDown />
+        </Button>
+      </Popover.Trigger>
+      <Portal>
+        <Popover.Positioner>
+          <Popover.Content minW="220px">
+            <Popover.Body>
+              <Flex direction="column" gap="2">
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={`Search ${label.toLowerCase()}...`}
+                  size="sm"
+                />
+                <FilterCategoryList
+                  label={label}
+                  options={options.filter((o) =>
+                    o.toLowerCase().includes(search.trim().toLowerCase()),
+                  )}
+                  selected={selected}
+                  onToggle={onToggle}
+                />
+              </Flex>
+            </Popover.Body>
+          </Popover.Content>
+        </Popover.Positioner>
+      </Portal>
+    </Popover.Root>
   );
 }
 
@@ -320,13 +396,40 @@ function loadPersistedFilters(user: UserRead | null): PersistedFilters {
   }
 }
 
+function jobSearchStorageKey(userId: number): string {
+  return `current-job-search:${userId}`;
+}
+
+function loadPersistedJobSearchId(userId: number): number | null {
+  try {
+    const raw = localStorage.getItem(jobSearchStorageKey(userId));
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   // Read once on mount to seed the filter/sort state declared below.
   const [persistedFilters] = useState<PersistedFilters>(() => loadPersistedFilters(user));
+
+  // Job searches isolate the tracker: every application belongs to exactly
+  // one, and all fetching below is scoped to whichever is currently active.
+  const [jobSearches, setJobSearches] = useState<JobSearchRead[]>([]);
+  const [isJobSearchesLoading, setIsJobSearchesLoading] = useState(true);
+  const [currentJobSearchId, setCurrentJobSearchId] = useState<number | null>(null);
+  const [isCreatingJobSearch, setIsCreatingJobSearch] = useState(false);
+  const [isManagingJobSearches, setIsManagingJobSearches] = useState(false);
+
   const [applications, setApplications] = useState<ApplicationRead[]>([]);
   const [total, setTotal] = useState(0);
+  // Unfiltered count within the current job search — independent of
+  // whatever search/filters are currently narrowing the table below.
+  const [overallTotal, setOverallTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -360,7 +463,6 @@ export function Dashboard() {
   const [advancedFilterLocations, setAdvancedFilterLocations] = useState<string[]>(
     () => persistedFilters.advancedFilterLocations
   );
-  const [advancedFilterSearch, setAdvancedFilterSearch] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const titleTextRefs = useRef<Map<number, HTMLParagraphElement>>(new Map());
   const companyTextRefs = useRef<Map<number, HTMLParagraphElement>>(new Map());
@@ -369,16 +471,33 @@ export function Dashboard() {
   // Guards against an older, slower request overwriting a newer one's result.
   const requestIdRef = useRef(0);
 
-  const isModalOpen = isAdding || editingId !== null || viewingId !== null || noteId !== null;
+  const isModalOpen =
+    isAdding ||
+    editingId !== null ||
+    viewingId !== null ||
+    noteId !== null ||
+    isCreatingJobSearch ||
+    isManagingJobSearches;
 
   const editingApp = applications.find((a) => a.id === editingId);
   const viewingApp = applications.find((a) => a.id === viewingId);
   const noteApp = applications.find((a) => a.id === noteId);
 
+  const activeJobSearches = jobSearches.filter((js) => !js.archived);
+  const currentJobSearch = jobSearches.find((js) => js.id === currentJobSearchId) ?? null;
+
   const hasAdvancedFilter =
     advancedFilterTitles.length > 0 ||
     advancedFilterCompanies.length > 0 ||
     advancedFilterLocations.length > 0;
+
+  const activeFilterCount =
+    (typeFilter !== null ? 1 : 0) +
+    (statusFilter !== null ? 1 : 0) +
+    (appliedDateFrom || appliedDateTo ? 1 : 0) +
+    (hasAdvancedFilter ? 1 : 0);
+
+  const isDefaultSort = sortField === "created_at" && sortDir === "desc";
 
   const isFiltered =
     Boolean(debouncedSearchQuery.trim()) ||
@@ -392,6 +511,7 @@ export function Dashboard() {
     return {
       limit: PAGE_SIZE,
       offset,
+      job_search_id: currentJobSearchId ?? undefined,
       q: debouncedSearchQuery.trim() || undefined,
       status: statusFilter ?? undefined,
       type: typeFilter ?? undefined,
@@ -437,17 +557,56 @@ export function Dashboard() {
   }
 
   function refreshSuggestions() {
-    getApplicationSuggestions()
+    getApplicationSuggestions(currentJobSearchId ?? undefined)
       .then(setSuggestions)
       .catch(() => {});
   }
 
+  function refreshOverallTotal() {
+    // limit=1 and no other filters: only page.total (the unfiltered count
+    // within the current job search) is used.
+    getApplications({
+      limit: 1,
+      offset: 0,
+      job_search_id: currentJobSearchId ?? undefined,
+      sort_field: "created_at",
+      sort_dir: "desc",
+    })
+      .then((page) => setOverallTotal(page.total))
+      .catch(() => {});
+  }
+
+  // Fetches the user's job searches once on mount and resolves which one is
+  // "current" — the last one used (from localStorage), or else the most
+  // recently created active one, or else none (triggers the create prompt).
   useEffect(() => {
-    refreshSuggestions();
+    let cancelled = false;
+    getJobSearches()
+      .then((list) => {
+        if (cancelled) return;
+        setJobSearches(list);
+        const active = list.filter((js) => !js.archived);
+        const persistedId = user ? loadPersistedJobSearchId(user.id) : null;
+        const persisted = persistedId !== null ? active.find((js) => js.id === persistedId) : undefined;
+        setCurrentJobSearchId(persisted ? persisted.id : active[0]?.id ?? null);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIsJobSearchesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Runs once on mount; `user` is already resolved by the time Dashboard
+    // renders (ProtectedRoute waits for auth to load first).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Refetches page one whenever search, a filter, or sort changes.
+  // Refetches page one whenever search, a filter, sort, or the active job
+  // search changes. Waits for job searches to finish resolving so it
+  // doesn't fire once with no job search and again once one is picked.
   useEffect(() => {
+    if (isJobSearchesLoading || currentJobSearchId === null) return;
     // The synchronous setIsLoading/setError at the top of loadFirstPage
     // (before its first await) is the standard "reset, then fetch" pattern
     // for an effect whose dependencies change over the component's
@@ -461,6 +620,8 @@ export function Dashboard() {
     // listing it here would make every render redeclare a "new" dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    isJobSearchesLoading,
+    currentJobSearchId,
     debouncedSearchQuery,
     statusFilter,
     typeFilter,
@@ -472,6 +633,15 @@ export function Dashboard() {
     sortField,
     sortDir,
   ]);
+
+  // Suggestions and the overall count are independent of filters — only the
+  // active job search changes what they should reflect.
+  useEffect(() => {
+    if (isJobSearchesLoading || currentJobSearchId === null) return;
+    refreshSuggestions();
+    refreshOverallTotal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isJobSearchesLoading, currentJobSearchId]);
 
   useEffect(() => {
     const timeout = setTimeout(() => setDebouncedSearchQuery(searchQuery), DEBOUNCE_MS);
@@ -512,6 +682,16 @@ export function Dashboard() {
     advancedFilterLocations,
     debouncedSearchQuery,
   ]);
+
+  // Persists which job search is active so a reload stays on it.
+  useEffect(() => {
+    if (!user || currentJobSearchId === null) return;
+    try {
+      localStorage.setItem(jobSearchStorageKey(user.id), String(currentJobSearchId));
+    } catch {
+      // Best-effort — localStorage may be unavailable (private browsing, quota).
+    }
+  }, [user, currentJobSearchId]);
 
   // Typing anywhere outside an input/modal reveals the search bar and seeds
   // it with the pressed key, like Gmail/Notion's quick-find.
@@ -563,11 +743,13 @@ export function Dashboard() {
     );
   }, [applications]);
 
-  async function handleAdd(data: Parameters<typeof createApplication>[0]) {
-    await createApplication(data);
+  async function handleAdd(data: Omit<ApplicationCreate, "job_search_id">) {
+    if (currentJobSearchId === null) return;
+    await createApplication({ ...data, job_search_id: currentJobSearchId });
     setIsAdding(false);
     await loadFirstPage();
     refreshSuggestions();
+    refreshOverallTotal();
   }
 
   async function handleEdit(id: number, data: Parameters<typeof updateApplication>[1]) {
@@ -587,35 +769,191 @@ export function Dashboard() {
     await deleteApplication(id);
     setApplications((prev) => prev.filter((a) => a.id !== id));
     setTotal((prev) => Math.max(prev - 1, 0));
+    setOverallTotal((prev) => Math.max(prev - 1, 0));
+  }
+
+  // Switching job search invalidates the advanced filter's title/company/
+  // location selections — they were drawn from the previous search's
+  // suggestions and won't mean the same thing (or anything) in the new one.
+  function selectJobSearch(id: number) {
+    if (id === currentJobSearchId) return;
+    setCurrentJobSearchId(id);
+    setAdvancedFilterTitles([]);
+    setAdvancedFilterCompanies([]);
+    setAdvancedFilterLocations([]);
+  }
+
+  async function handleCreateJobSearch(data: JobSearchCreate) {
+    const created = await createJobSearch(data);
+    setJobSearches((prev) => [created, ...prev]);
+    setIsCreatingJobSearch(false);
+    selectJobSearch(created.id);
+  }
+
+  async function handleUpdateJobSearch(id: number, data: JobSearchUpdate) {
+    const updated = await updateJobSearch(id, data);
+    setJobSearches((prev) => prev.map((js) => (js.id === id ? updated : js)));
+  }
+
+  async function handleToggleArchiveJobSearch(jobSearch: JobSearchRead) {
+    const updated = await updateJobSearch(jobSearch.id, { archived: !jobSearch.archived });
+    setJobSearches((prev) => prev.map((js) => (js.id === updated.id ? updated : js)));
+    if (updated.archived && currentJobSearchId === updated.id) {
+      const nextActive = jobSearches.find((js) => js.id !== updated.id && !js.archived);
+      setCurrentJobSearchId(nextActive ? nextActive.id : null);
+    }
+  }
+
+  async function handleDeleteJobSearch(jobSearch: JobSearchRead) {
+    const warning =
+      jobSearch.application_count > 0
+        ? `Delete "${jobSearch.name}" and its ${jobSearch.application_count} application${
+            jobSearch.application_count === 1 ? "" : "s"
+          }? This can't be undone.`
+        : `Delete "${jobSearch.name}"? This can't be undone.`;
+    if (!window.confirm(warning)) return;
+    await deleteJobSearch(jobSearch.id);
+    setJobSearches((prev) => prev.filter((js) => js.id !== jobSearch.id));
+    if (currentJobSearchId === jobSearch.id) {
+      const nextActive = jobSearches.find((js) => js.id !== jobSearch.id && !js.archived);
+      setCurrentJobSearchId(nextActive ? nextActive.id : null);
+    }
   }
 
   return (
-    <Box minH="100vh" bg="bg.subtle" py="8">
+    <Box minH="100vh" bg="bg.subtle" pt="8" pb="20">
       <Container maxW="4xl">
         <Box maxW="750px" mx="auto">
-        <Flex justify="space-between" align="center" mb="16">
-          <Box>
-            <Heading size="xl">Applications</Heading>
-            <Text textStyle="sm" color="fg.muted">
-              {user?.email} ·{" "}
-              {applications.length < total
-                ? `${applications.length} of ${total} application${total === 1 ? "" : "s"}`
-                : `${total} application${total === 1 ? "" : "s"}`}
-            </Text>
-          </Box>
-          <Flex gap="2">
-            <Button onClick={() => navigate("/account")} variant="ghost" size="sm" color="fg.muted">
-              <LuSettings /> Account
-            </Button>
-            <Button onClick={logout} variant="ghost" size="sm" color="fg.muted">
-              <LuLogOut /> Log out
-            </Button>
-          </Flex>
+        <Flex justify="space-between" align="center" mb="6">
+          <Menu.Root
+            positioning={{ placement: "bottom-start" }}
+            onSelect={(e) => {
+              if (e.value === NEW_JOB_SEARCH) setIsCreatingJobSearch(true);
+              else if (e.value === MANAGE_JOB_SEARCHES) setIsManagingJobSearches(true);
+              else selectJobSearch(Number(e.value));
+            }}
+          >
+            <Menu.Trigger asChild>
+              <Button
+                variant="ghost"
+                size="md"
+                fontSize="lg"
+                color="fg.muted"
+                fontWeight="normal"
+                disabled={isJobSearchesLoading}
+              >
+                <LuBriefcase />
+                {isJobSearchesLoading
+                  ? "Loading…"
+                  : currentJobSearch
+                    ? `${currentJobSearch.name} (${overallTotal > 0 ? overallTotal : total})`
+                    : "Select Job Search"}
+                <LuChevronsUpDown />
+              </Button>
+            </Menu.Trigger>
+            <Portal>
+              <Menu.Positioner>
+                <Menu.Content>
+                  {activeJobSearches.length === 0 && (
+                    <Text textStyle="xs" color="fg.subtle" px="3" py="1.5">
+                      No active job searches
+                    </Text>
+                  )}
+                  {activeJobSearches.map((js) => (
+                    <Menu.Item key={js.id} value={String(js.id)}>
+                      {js.name}
+                      {js.id === currentJobSearchId && <LuCheck />}
+                    </Menu.Item>
+                  ))}
+                  <Menu.Separator />
+                  <Menu.Item value={NEW_JOB_SEARCH}>
+                    <LuPlus /> New Job Search
+                  </Menu.Item>
+                  {jobSearches.length > 0 && (
+                    <Menu.Item value={MANAGE_JOB_SEARCHES}>
+                      <LuSettings /> Manage Job Searches
+                    </Menu.Item>
+                  )}
+                </Menu.Content>
+              </Menu.Positioner>
+            </Portal>
+          </Menu.Root>
+          <Menu.Root
+            positioning={{ placement: "bottom-end" }}
+            onSelect={(e) => {
+              if (e.value === "preferences") navigate("/account");
+              else if (e.value === "logout") logout();
+            }}
+          >
+            <Menu.Trigger asChild>
+              <Button
+                aria-label="Account menu"
+                title="Account"
+                variant="ghost"
+                size="md"
+                color="fg.muted"
+                rounded="sm"
+              >
+                <LuUser /> Account
+              </Button>
+            </Menu.Trigger>
+            <Portal>
+              <Menu.Positioner>
+                <Menu.Content>
+                  <Menu.Item value="preferences">
+                    <LuSettings /> Preferences
+                  </Menu.Item>
+                  <Menu.Item value="logout">
+                    <LuLogOut /> Sign Out
+                  </Menu.Item>
+                </Menu.Content>
+              </Menu.Positioner>
+            </Portal>
+          </Menu.Root>
         </Flex>
 
-        {isSearchVisible && (
-          <Flex align="center" gap="2" mb="4">
-            <Box position="relative" flex="1">
+        {isJobSearchesLoading ? (
+          <Center py="10">
+            <Spinner color="fg.muted" />
+          </Center>
+        ) : currentJobSearchId === null ? (
+          <EmptyState.Root>
+            <EmptyState.Content>
+              <EmptyState.Indicator>
+                <LuBriefcase />
+              </EmptyState.Indicator>
+              <EmptyState.Title>No job search yet</EmptyState.Title>
+              <EmptyState.Description>
+                Create a job search to start tracking applications — e.g. "2025 Job Search".
+              </EmptyState.Description>
+              <Button onClick={() => setIsCreatingJobSearch(true)} colorPalette="blue" mt="4">
+                <LuPlus /> Create Job Search
+              </Button>
+            </EmptyState.Content>
+          </EmptyState.Root>
+        ) : (
+          <>
+        <Button
+          onClick={() => setIsAdding(true)}
+          variant="outline"
+          w="full"
+          h="20"
+          mt="14"
+          mb="3"
+          borderStyle="dashed"
+          borderColor="border.emphasized"
+          color="fg.muted"
+          justifyContent="center"
+          _hover={{ color: "blue.fg", borderColor: "blue.emphasized" }}
+        >
+          <LuPlus /> Add Application
+        </Button>
+
+        <Box mb="3">
+        <Flex gap="2" wrap="wrap" align="center">
+          <Flex gap="0" align="center" ml="auto">
+          {isSearchVisible ? (
+            <Box position="relative" w="210px" mr="1">
               <Box
                 position="absolute"
                 left="3"
@@ -633,218 +971,268 @@ export function Dashboard() {
                 onKeyDown={(e) => {
                   if (e.key === "Escape") closeSearch();
                 }}
-                placeholder="Search by company, title, location, or notes..."
-                ps="9"
+                onBlur={() => {
+                  if (!searchQuery.trim()) closeSearch();
+                }}
+                placeholder="Type to search…"
+                rounded="full"
+                h="7"
+                ps="8"
+                pe="7"
+                border="none"
+                _focus={{ boxShadow: "none", outline: "none" }}
+                _focusVisible={{ boxShadow: "none", outline: "none" }}
               />
+              <IconButton
+                onClick={closeSearch}
+                aria-label="Close search"
+                title="Close search"
+                variant="subtle"
+                size="2xs"
+                color="fg.muted"
+                rounded="full"
+                position="absolute"
+                right="1"
+                top="50%"
+                transform="translateY(-50%)"
+                _hover={{ color: "fg" }}
+              >
+                <LuX />
+              </IconButton>
             </Box>
+          ) : (
             <IconButton
-              onClick={closeSearch}
-              aria-label="Close search"
-              title="Close search"
+              onClick={() => setIsSearchVisible(true)}
+              aria-label="Search"
+              title="Search"
               variant="ghost"
               size="sm"
               color="fg.muted"
-              _hover={{ color: "fg" }}
+              rounded="sm"
+              h="7"
             >
-              <LuX />
+              <LuSearch />
             </IconButton>
-          </Flex>
-        )}
-
-        <Button
-          onClick={() => setIsAdding(true)}
-          variant="outline"
-          w="full"
-          mb="4"
-          borderStyle="dashed"
-          color="fg.muted"
-          _hover={{ color: "blue.fg", borderColor: "blue.emphasized" }}
-        >
-          <LuPlus /> Add Application
-        </Button>
-
-        <Box mb="4">
-        <Flex gap="2" wrap="wrap" align="center">
-          <Menu.Root
-            positioning={{ placement: "bottom-start" }}
-            onSelect={(e) =>
-              setTypeFilter(e.value === ALL_TYPES ? null : (e.value as ApplicationType))
-            }
-          >
-            <Menu.Trigger asChild>
-              <Button variant="outline" size="sm" color="fg.muted" rounded="full" h="7">
-                {typeFilter ? `${typeFilter}` : "Any Type"}
-                <LuChevronDown />
-              </Button>
-            </Menu.Trigger>
-            <Portal>
-              <Menu.Positioner>
-                <Menu.Content>
-                  <Menu.Item value={ALL_TYPES}>
-                    Any Type
-                    {!typeFilter && <LuCheck />}
-                  </Menu.Item>
-                  {Object.values(ApplicationType).map((type) => (
-                    <Menu.Item key={type} value={type}>
-                      {type}
-                      {typeFilter === type && <LuCheck />}
-                    </Menu.Item>
-                  ))}
-                </Menu.Content>
-              </Menu.Positioner>
-            </Portal>
-          </Menu.Root>
-
-          <Menu.Root
-            positioning={{ placement: "bottom-start" }}
-            onSelect={(e) =>
-              setStatusFilter(e.value === ALL_STATUSES ? null : (e.value as ApplicationStatus))
-            }
-          >
-            <Menu.Trigger asChild>
-              <Button variant="outline" size="sm" color="fg.muted" rounded="full" h="7">
-                {statusFilter ? `${statusFilter}` : "Any Status"}
-                <LuChevronDown />
-              </Button>
-            </Menu.Trigger>
-            <Portal>
-              <Menu.Positioner>
-                <Menu.Content>
-                  <Menu.Item value={ALL_STATUSES}>
-                    Any Status
-                    {!statusFilter && <LuCheck />}
-                  </Menu.Item>
-                  {Object.values(ApplicationStatus).map((status) => (
-                    <Menu.Item key={status} value={status}>
-                      {status}
-                      {statusFilter === status && <LuCheck />}
-                    </Menu.Item>
-                  ))}
-                </Menu.Content>
-              </Menu.Positioner>
-            </Portal>
-          </Menu.Root>
-
-          <Popover.Root positioning={{ placement: "bottom-start" }}>
-            <Popover.Trigger asChild>
-              <Button variant="outline" size="sm" color="fg.muted" rounded="full" h="7">
-                {appliedDateFrom || appliedDateTo ? (
-                  <>
-                    {appliedDateFrom ? formatShortDate(appliedDateFrom) : "Any"}
-                    {" – "}
-                    {appliedDateTo ? formatShortDate(appliedDateTo) : "Any"}
-                  </>
-                ) : (
-                  "When"
-                )}
-                <LuChevronDown />
-              </Button>
-            </Popover.Trigger>
-            <Portal>
-              <Popover.Positioner>
-                <Popover.Content>
-                  <Popover.Body>
-                    <Flex direction="column" gap="2">
-                      <Box>
-                        <Text textStyle="xs" color="fg.muted" mb="1">
-                          Applied from
-                        </Text>
-                        <Input
-                          type="date"
-                          value={appliedDateFrom}
-                          onChange={(e) => setAppliedDateFrom(e.target.value)}
-                          size="sm"
-                        />
-                      </Box>
-                      <Box>
-                        <Text textStyle="xs" color="fg.muted" mb="1">
-                          Applied to
-                        </Text>
-                        <Input
-                          type="date"
-                          value={appliedDateTo}
-                          onChange={(e) => setAppliedDateTo(e.target.value)}
-                          size="sm"
-                        />
-                      </Box>
-                      {(appliedDateFrom || appliedDateTo) && (
-                        <Button
-                          onClick={() => {
-                            setAppliedDateFrom("");
-                            setAppliedDateTo("");
-                          }}
-                          variant="ghost"
-                          size="xs"
-                          color="fg.muted"
-                        >
-                          <LuX /> Clear
-                        </Button>
-                      )}
-                    </Flex>
-                  </Popover.Body>
-                </Popover.Content>
-              </Popover.Positioner>
-            </Portal>
-          </Popover.Root>
+          )}
 
           <Popover.Root positioning={{ placement: "bottom-start" }}>
             <Popover.Trigger asChild>
               <Button
-                title="Advanced filter"
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                color={hasAdvancedFilter ? "fg" : "fg.muted"}
-                rounded="full"
+                color={activeFilterCount > 0 ? "blue.500" : "fg.muted"}
+                rounded="sm"
                 h="7"
-                  >
-                    Advanced
-                    <LuChevronDown />
+                px="2"
+                title="Filter"
+              >
+                <LuListFilter />
               </Button>
             </Popover.Trigger>
             <Portal>
               <Popover.Positioner>
-                <Popover.Content minW="260px">
+                <Popover.Content w="auto">
                   <Popover.Body>
-                    <Flex direction="column" gap="3">
-                      <Input
-                        value={advancedFilterSearch}
-                        onChange={(e) => setAdvancedFilterSearch(e.target.value)}
-                        placeholder="Search titles, companies, locations..."
-                        size="sm"
-                      />
-                      <FilterCategoryList
-                        label="Titles"
-                        options={suggestions.titles.filter((t) =>
-                          t.toLowerCase().includes(advancedFilterSearch.trim().toLowerCase()),
-                        )}
-                        selected={advancedFilterTitles}
-                        onToggle={(value) =>
-                          setAdvancedFilterTitles((prev) => toggleSelection(prev, value))
+                    <Flex gap="2" wrap="wrap" align="center">
+                      <Menu.Root
+                        positioning={{ placement: "bottom-start" }}
+                        onSelect={(e) =>
+                          setTypeFilter(e.value === ALL_TYPES ? null : (e.value as ApplicationType))
                         }
-                      />
-                      <FilterCategoryList
-                        label="Companies"
-                        options={suggestions.companies.filter((c) =>
-                          c.toLowerCase().includes(advancedFilterSearch.trim().toLowerCase()),
-                        )}
-                        selected={advancedFilterCompanies}
-                        onToggle={(value) =>
-                          setAdvancedFilterCompanies((prev) => toggleSelection(prev, value))
+                      >
+                        <Menu.Trigger asChild>
+                          <Button variant="outline" size="sm" color={typeFilter ? "blue.500" : "fg.muted"} rounded="full" h="7">
+                            {typeFilter ? `${typeFilter}` : "Any Type"}
+                            <LuChevronDown />
+                          </Button>
+                        </Menu.Trigger>
+                        <Portal>
+                          <Menu.Positioner>
+                            <Menu.Content>
+                              <Menu.Item value={ALL_TYPES}>
+                                Any Type
+                                {!typeFilter && <LuCheck />}
+                              </Menu.Item>
+                              {Object.values(ApplicationType).map((type) => (
+                                <Menu.Item key={type} value={type}>
+                                  {type}
+                                  {typeFilter === type && <LuCheck />}
+                                </Menu.Item>
+                              ))}
+                            </Menu.Content>
+                          </Menu.Positioner>
+                        </Portal>
+                      </Menu.Root>
+
+                      <Menu.Root
+                        positioning={{ placement: "bottom-start" }}
+                        onSelect={(e) =>
+                          setStatusFilter(e.value === ALL_STATUSES ? null : (e.value as ApplicationStatus))
                         }
-                      />
-                      <FilterCategoryList
-                        label="Locations"
-                        options={suggestions.locations.filter((l) =>
-                          l.toLowerCase().includes(advancedFilterSearch.trim().toLowerCase()),
-                        )}
-                        selected={advancedFilterLocations}
-                        onToggle={(value) =>
-                          setAdvancedFilterLocations((prev) => toggleSelection(prev, value))
-                        }
-                      />
-                      {hasAdvancedFilter && (
+                      >
+                        <Menu.Trigger asChild>
+                          <Button variant="outline" size="sm" color={statusFilter ? "blue.500" : "fg.muted"} rounded="full" h="7">
+                            {statusFilter ? `${statusFilter}` : "Any Status"}
+                            <LuChevronDown />
+                          </Button>
+                        </Menu.Trigger>
+                        <Portal>
+                          <Menu.Positioner>
+                            <Menu.Content>
+                              <Menu.Item value={ALL_STATUSES}>
+                                Any Status
+                                {!statusFilter && <LuCheck />}
+                              </Menu.Item>
+                              {Object.values(ApplicationStatus).map((status) => (
+                                <Menu.Item key={status} value={status}>
+                                  {status}
+                                  {statusFilter === status && <LuCheck />}
+                                </Menu.Item>
+                              ))}
+                            </Menu.Content>
+                          </Menu.Positioner>
+                        </Portal>
+                      </Menu.Root>
+
+                      <Popover.Root positioning={{ placement: "bottom-start" }}>
+                        <Popover.Trigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            color={appliedDateFrom || appliedDateTo ? "blue.500" : "fg.muted"}
+                            rounded="full"
+                            h="7"
+                          >
+                            {appliedDateFrom || appliedDateTo ? (
+                              <>
+                                {appliedDateFrom ? formatShortDate(appliedDateFrom) : "Any"}
+                                {" – "}
+                                {appliedDateTo ? formatShortDate(appliedDateTo) : "Any"}
+                              </>
+                            ) : (
+                              "When"
+                            )}
+                            <LuChevronDown />
+                          </Button>
+                        </Popover.Trigger>
+                        <Portal>
+                          <Popover.Positioner>
+                            <Popover.Content>
+                              <Popover.Body>
+                                <Flex direction="column" gap="2">
+                                  <Box>
+                                    <Text textStyle="xs" color="fg.muted" mb="1">
+                                      Applied from
+                                    </Text>
+                                    <Input
+                                      type="date"
+                                      value={appliedDateFrom}
+                                      onChange={(e) => setAppliedDateFrom(e.target.value)}
+                                      size="sm"
+                                    />
+                                  </Box>
+                                  <Box>
+                                    <Text textStyle="xs" color="fg.muted" mb="1">
+                                      Applied to
+                                    </Text>
+                                    <Input
+                                      type="date"
+                                      value={appliedDateTo}
+                                      onChange={(e) => setAppliedDateTo(e.target.value)}
+                                      size="sm"
+                                    />
+                                  </Box>
+                                  {(appliedDateFrom || appliedDateTo) && (
+                                    <Button
+                                      onClick={() => {
+                                        setAppliedDateFrom("");
+                                        setAppliedDateTo("");
+                                      }}
+                                      variant="ghost"
+                                      size="xs"
+                                      color="fg.muted"
+                                    >
+                                      <LuX /> Clear
+                                    </Button>
+                                  )}
+                                </Flex>
+                              </Popover.Body>
+                            </Popover.Content>
+                          </Popover.Positioner>
+                        </Portal>
+                      </Popover.Root>
+
+                      <Popover.Root positioning={{ placement: "bottom-start" }}>
+                        <Popover.Trigger asChild>
+                          <Button
+                            title="Advanced filter"
+                            variant="outline"
+                            size="sm"
+                            color={hasAdvancedFilter ? "blue.500" : "fg.muted"}
+                            rounded="full"
+                            h="7"
+                          >
+                            Advanced
+                            <LuChevronDown />
+                          </Button>
+                        </Popover.Trigger>
+                        <Portal>
+                          <Popover.Positioner>
+                            <Popover.Content minW="200px">
+                              <Popover.Body>
+                                <Flex direction="column" gap="2">
+                                  <AdvancedFilterCategoryPopover
+                                    label="Job Titles"
+                                    options={suggestions.titles}
+                                    selected={advancedFilterTitles}
+                                    onToggle={(value) =>
+                                      setAdvancedFilterTitles((prev) => toggleSelection(prev, value))
+                                    }
+                                  />
+                                  <AdvancedFilterCategoryPopover
+                                    label="Companies"
+                                    options={suggestions.companies}
+                                    selected={advancedFilterCompanies}
+                                    onToggle={(value) =>
+                                      setAdvancedFilterCompanies((prev) => toggleSelection(prev, value))
+                                    }
+                                  />
+                                  <AdvancedFilterCategoryPopover
+                                    label="Locations"
+                                    options={suggestions.locations}
+                                    selected={advancedFilterLocations}
+                                    onToggle={(value) =>
+                                      setAdvancedFilterLocations((prev) => toggleSelection(prev, value))
+                                    }
+                                  />
+                                  {hasAdvancedFilter && (
+                                    <Button
+                                      onClick={() => {
+                                        setAdvancedFilterTitles([]);
+                                        setAdvancedFilterCompanies([]);
+                                        setAdvancedFilterLocations([]);
+                                      }}
+                                      variant="ghost"
+                                      size="xs"
+                                      color="fg.muted"
+                                    >
+                                      <LuX /> Clear
+                                    </Button>
+                                  )}
+                                </Flex>
+                              </Popover.Body>
+                            </Popover.Content>
+                          </Popover.Positioner>
+                        </Portal>
+                      </Popover.Root>
+
+                      {activeFilterCount > 0 && (
                         <Button
                           onClick={() => {
+                            setTypeFilter(null);
+                            setStatusFilter(null);
+                            setAppliedDateFrom("");
+                            setAppliedDateTo("");
                             setAdvancedFilterTitles([]);
                             setAdvancedFilterCompanies([]);
                             setAdvancedFilterLocations([]);
@@ -853,7 +1241,7 @@ export function Dashboard() {
                           size="xs"
                           color="fg.muted"
                         >
-                          <LuX /> Clear
+                          <LuX /> Remove Filters
                         </Button>
                       )}
                     </Flex>
@@ -863,78 +1251,110 @@ export function Dashboard() {
             </Portal>
           </Popover.Root>
 
-          <Flex gap="2" ml="auto">
-            {sortField !== "created_at" && (
-              <Button
-                onClick={() => {
-                  setSortField("created_at");
-                  setSortDir("desc");
-                }}
-                variant="outline"
-                size="sm"
-                color="fg.muted"
-                rounded="full"
-                h="7"
-              >
-                Revert Sort
-              </Button>
-            )}
-
-            <Menu.Root
-              positioning={{ placement: "bottom-end" }}
-              onSelect={(e) => {
-                if (e.value === "dir:asc" || e.value === "dir:desc") {
-                  setSortDir(e.value === "dir:asc" ? "asc" : "desc");
-                } else {
-                  setSortField(e.value as SortField);
-                }
-              }}
-            >
-              <Menu.Trigger asChild>
-                <Button variant="outline" size="sm" color="fg.muted" title="Custom sort" rounded="full" h="7">
-                  {sortField !== "created_at" && !hasHeaderArrow(sortField) ? (
-                    <>
-                      {SORT_MENU_FIELD_LABELS[sortField]}
-                      {sortDir === "asc" ? <LuArrowUp /> : <LuArrowDown />}
-                    </>
-                  ) : (
-                    <LuArrowUpDown />
-                  )}
+          <Flex gap="2">
+            <Popover.Root positioning={{ placement: "bottom-end" }}>
+              <Popover.Trigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  color={!isDefaultSort ? "blue.500" : "fg.muted"}
+                  title="Sort"
+                  rounded="sm"
+                  h="7"
+                  px="2"
+                >
+                  <LuArrowUpDown />
                 </Button>
-              </Menu.Trigger>
+              </Popover.Trigger>
               <Portal>
-                <Menu.Positioner>
-                  <Menu.Content>
-                    <Menu.Item value="dir:asc">
-                      Ascending
-                      {sortDir === "asc" && <LuCheck />}
-                    </Menu.Item>
-                    <Menu.Item value="dir:desc">
-                      Descending
-                      {sortDir === "desc" && <LuCheck />}
-                    </Menu.Item>
-                    <Menu.Separator />
-                    <Menu.Item value="created_at">
-                      Date Added (Default)
-                      {sortField === "created_at" && <LuCheck />}
-                    </Menu.Item>
-                    {(Object.keys(SORT_MENU_FIELD_LABELS) as Exclude<SortField, "created_at">[]).map(
-                      (field) => (
-                        <Menu.Item key={field} value={field}>
-                          {SORT_MENU_FIELD_LABELS[field]}
-                          {sortField === field && <LuCheck />}
-                        </Menu.Item>
-                      ),
-                    )}
-                  </Menu.Content>
-                </Menu.Positioner>
+                <Popover.Positioner>
+                  <Popover.Content w="auto">
+                    <Popover.Body>
+                      <Flex gap="2" wrap="wrap" align="center">
+                        <Menu.Root
+                          positioning={{ placement: "bottom-start" }}
+                          onSelect={(e) => setSortField(e.value as SortField)}
+                        >
+                          <Menu.Trigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              color={sortField !== "created_at" ? "blue.500" : "fg.muted"}
+                              rounded="full"
+                              h="7"
+                            >
+                              {sortField === "created_at" ? "Date Added" : SORT_MENU_FIELD_LABELS[sortField]}
+                              <LuChevronDown />
+                            </Button>
+                          </Menu.Trigger>
+                          <Portal>
+                            <Menu.Positioner>
+                              <Menu.Content>
+                                <Menu.Item value="created_at">
+                                  Date Added (Default)
+                                  {sortField === "created_at" && <LuCheck />}
+                                </Menu.Item>
+                                {(Object.keys(SORT_MENU_FIELD_LABELS) as Exclude<SortField, "created_at">[]).map(
+                                  (field) => (
+                                    <Menu.Item key={field} value={field}>
+                                      {SORT_MENU_FIELD_LABELS[field]}
+                                      {sortField === field && <LuCheck />}
+                                    </Menu.Item>
+                                  ),
+                                )}
+                              </Menu.Content>
+                            </Menu.Positioner>
+                          </Portal>
+                        </Menu.Root>
+
+                        <Button
+                          onClick={() => setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))}
+                          variant="outline"
+                          size="sm"
+                          color={sortDir !== "desc" ? "blue.500" : "fg.muted"}
+                          rounded="full"
+                          h="7"
+                        >
+                          {sortDir === "asc" ? (
+                            <>
+                              Sort Ascending <LuArrowUp />
+                            </>
+                          ) : (
+                            <>
+                              Sort Descending <LuArrowDown />
+                            </>
+                          )}
+                        </Button>
+
+                        {!isDefaultSort && (
+                          <Button
+                            onClick={() => {
+                              setSortField("created_at");
+                              setSortDir("desc");
+                            }}
+                            variant="ghost"
+                            size="xs"
+                            color="fg.muted"
+                          >
+                            <LuRotateCcw /> Restore Default
+                          </Button>
+                        )}
+                      </Flex>
+                    </Popover.Body>
+                  </Popover.Content>
+                </Popover.Positioner>
               </Portal>
-            </Menu.Root>
+            </Popover.Root>
+          </Flex>
           </Flex>
         </Flex>
         </Box>
+        </>
+        )}
         </Box>
 
+        {currentJobSearchId !== null && (
+          <>
         {isAdding && (
           <ApplicationForm
             title="Add Application"
@@ -942,7 +1362,7 @@ export function Dashboard() {
             onSubmit={handleAdd}
             onCancel={() => setIsAdding(false)}
             suggestions={suggestions}
-            defaultType={user?.default_application_type}
+            defaultType={currentJobSearch?.default_application_type}
             defaultCurrency={user?.default_currency}
           />
         )}
@@ -1034,7 +1454,7 @@ export function Dashboard() {
               <Table.Header>
                 <Table.Row bg="bg.muted">
                   <Table.ColumnHeader w="40px" textAlign="center" color="fg.muted">#</Table.ColumnHeader>
-                  <SortableHeader label="Title" field="title" activeField={sortField} dir={sortDir} onSort={handleHeaderSort} width="250px" />
+                  <SortableHeader label="Job Title" field="title" activeField={sortField} dir={sortDir} onSort={handleHeaderSort} width="250px" />
                   <SortableHeader label="Company" field="company" activeField={sortField} dir={sortDir} onSort={handleHeaderSort} width="150px" />
                   <SortableHeader label="Status" field="status" activeField={sortField} dir={sortDir} onSort={handleHeaderSort} minW="70px" />
                   <Table.ColumnHeader w="150px" color="fg.muted">Actions</Table.ColumnHeader>
@@ -1137,9 +1557,10 @@ export function Dashboard() {
                             title="Mark as Offer"
                             variant="ghost"
                             size="xs"
+                            rounded="full"
                             colorPalette="green"
                           >
-                            <LuDollarSign />
+                            <LuTrophy />
                           </IconButton>
                           <IconButton
                             onClick={() => handleSetStatus(app, ApplicationStatus.Rejected)}
@@ -1147,9 +1568,10 @@ export function Dashboard() {
                             title="Mark as Rejected"
                             variant="ghost"
                             size="xs"
+                            rounded="full"
                             colorPalette="red"
                           >
-                            <LuBan />
+                            <LuCircleX />
                           </IconButton>
                           <IconButton
                             onClick={() => setViewingId(app.id)}
@@ -1157,6 +1579,7 @@ export function Dashboard() {
                             title="View details"
                             variant="ghost"
                             size="xs"
+                            rounded="full"
                             color="fg.subtle"
                             _hover={{ color: "fg" }}
                           >
@@ -1168,6 +1591,7 @@ export function Dashboard() {
                             title="Delete"
                             variant="ghost"
                             size="xs"
+                            rounded="full"
                             colorPalette="red"
                             color="fg.subtle"
                             _hover={{ color: "fg.error" }}
@@ -1183,6 +1607,26 @@ export function Dashboard() {
             </Table.ScrollArea>
           </Card.Root>
 
+          <Box maxW="750px" mx="auto">
+          <Text
+            position="sticky"
+            bottom="3"
+            zIndex="docked"
+            textStyle="xs"
+            color="fg.subtle"
+            w="40px"
+            textAlign="center"
+            mt="1"
+            bg="bg.panel"
+            borderWidth="1px"
+            borderColor="border.subtle"
+            rounded="full"
+            py="0.5"
+          >
+            {applications.length}/{overallTotal > 0 ? overallTotal : total}
+          </Text>
+          </Box>
+
           {hasMore && (
             <Flex justify="center" mt="4">
               <Button
@@ -1196,7 +1640,27 @@ export function Dashboard() {
               </Button>
             </Flex>
           )}
+
           </>
+        )}
+          </>
+        )}
+
+        {isCreatingJobSearch && (
+          <CreateJobSearchDialog
+            onSubmit={handleCreateJobSearch}
+            onCancel={() => setIsCreatingJobSearch(false)}
+          />
+        )}
+
+        {isManagingJobSearches && (
+          <ManageJobSearchesDialog
+            jobSearches={jobSearches}
+            onUpdate={handleUpdateJobSearch}
+            onToggleArchive={handleToggleArchiveJobSearch}
+            onDelete={handleDeleteJobSearch}
+            onClose={() => setIsManagingJobSearches(false)}
+          />
         )}
       </Container>
     </Box>
