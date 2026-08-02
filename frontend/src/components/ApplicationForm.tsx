@@ -25,11 +25,15 @@ interface FieldSuggestions {
   locations: string[];
 }
 
+// The form itself has no notion of which job search it belongs to — that's
+// injected by the caller (a fixed value for add, untouched for edit).
+type ApplicationFormData = Omit<ApplicationCreate, "job_search_id">;
+
 interface ApplicationFormProps {
   title: string;
-  initial?: Partial<ApplicationCreate>;
+  initial?: Partial<ApplicationFormData>;
   submitLabel: string;
-  onSubmit: (data: ApplicationCreate) => Promise<void>;
+  onSubmit: (data: ApplicationFormData) => Promise<void>;
   onCancel: () => void;
   onDelete?: () => void;
   suggestions?: FieldSuggestions;
@@ -156,7 +160,7 @@ export function ApplicationForm({
                   </Field.Root>
                   <Field.Root required flex="1">
                     <Field.Label>
-                      Title <Field.RequiredIndicator />
+                      Job Title <Field.RequiredIndicator />
                     </Field.Label>
                     <Input
                       value={jobTitle}

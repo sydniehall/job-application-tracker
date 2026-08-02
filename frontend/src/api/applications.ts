@@ -13,8 +13,12 @@ export async function getApplications(query: ApplicationsQuery): Promise<Applica
   return res.data;
 }
 
-export async function getApplicationSuggestions(): Promise<ApplicationSuggestions> {
-  const res = await client.get<ApplicationSuggestions>("/applications/suggestions");
+export async function getApplicationSuggestions(
+  jobSearchId?: number
+): Promise<ApplicationSuggestions> {
+  const res = await client.get<ApplicationSuggestions>("/applications/suggestions", {
+    params: { job_search_id: jobSearchId },
+  });
   return res.data;
 }
 

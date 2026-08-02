@@ -30,14 +30,12 @@ export interface UserRead {
   email: string;
   created_at: string | null;
   default_currency: string;
-  default_application_type: ApplicationType | null;
   default_sort_field: string;
   default_sort_dir: string;
 }
 
 export interface UserSettingsUpdate {
   default_currency?: string;
-  default_application_type?: ApplicationType | null;
   default_sort_field?: string;
   default_sort_dir?: string;
 }
@@ -48,6 +46,7 @@ export interface ChangePasswordRequest {
 }
 
 export interface ApplicationCreate {
+  job_search_id: number;
   company: string;
   title: string;
   status?: ApplicationStatus;
@@ -64,6 +63,7 @@ export interface ApplicationCreate {
 export interface ApplicationRead {
   id: number;
   user_id: number;
+  job_search_id: number | null;
   company: string;
   title: string;
   status: ApplicationStatus;
@@ -109,6 +109,7 @@ export interface ApplicationsQuery {
   type?: ApplicationType;
   date_applied_from?: string;
   date_applied_to?: string;
+  job_search_id?: number;
   titles?: string[];
   companies?: string[];
   locations?: string[];
@@ -117,6 +118,7 @@ export interface ApplicationsQuery {
 }
 
 export interface ApplicationUpdate {
+  job_search_id?: number | null;
   company?: string | null;
   title?: string | null;
   status?: ApplicationStatus | null;
@@ -128,6 +130,26 @@ export interface ApplicationUpdate {
   pay?: string | null;
   notes?: string | null;
   resume_version?: string | null;
+}
+
+export interface JobSearchRead {
+  id: number;
+  name: string;
+  archived: boolean;
+  default_application_type: ApplicationType | null;
+  created_at: string | null;
+  application_count: number;
+}
+
+export interface JobSearchCreate {
+  name: string;
+  default_application_type?: ApplicationType | null;
+}
+
+export interface JobSearchUpdate {
+  name?: string;
+  archived?: boolean;
+  default_application_type?: ApplicationType | null;
 }
 
 export interface DeleteAccount {
