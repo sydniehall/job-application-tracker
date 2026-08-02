@@ -1,4 +1,5 @@
-import { useState } from "react";
+
+import { useRef, useState } from "react";
 import type { SubmitEvent } from "react";
 import {
   Alert,
@@ -7,20 +8,39 @@ import {
   Dialog,
   Field,
   Flex,
+  IconButton,
   Input,
   NativeSelect,
   Portal,
   Stack,
+  Textarea,
 } from "@chakra-ui/react";
-import { ApplicationStatus } from "../index";
+import { LuTrash2 } from "react-icons/lu";
+import { ApplicationStatus, ApplicationType } from "../index";
 import type { ApplicationCreate } from "../index";
+
+interface FieldSuggestions {
+  companies: string[];
+  titles: string[];
+  locations: string[];
+}
+
+// The form itself has no notion of which job search it belongs to — that's
+// injected by the caller (a fixed value for add, untouched for edit).
+type ApplicationFormData = Omit<ApplicationCreate, "job_search_id">;
 
 interface ApplicationFormProps {
   title: string;
-  initial?: Partial<ApplicationCreate>;
+  initial?: Partial<ApplicationFormData>;
   submitLabel: string;
-  onSubmit: (data: ApplicationCreate) => Promise<void>;
+  onSubmit: (data: ApplicationFormData) => Promise<void>;
   onCancel: () => void;
+  onDelete?: () => void;
+  suggestions?: FieldSuggestions;
+  // Only applied when `initial` isn't set (i.e. adding a new application) —
+  // an edit should always reflect the application's own saved values.
+  defaultType?: ApplicationType | null;
+  defaultCurrency?: string;
 }
 
 // Local date as YYYY-MM-DD (toISOString would give the UTC date, which is
@@ -35,17 +55,28 @@ export function ApplicationForm({
   submitLabel,
   onSubmit,
   onCancel,
+  onDelete,
+  suggestions,
+  defaultType,
+  defaultCurrency,
 }: ApplicationFormProps) {
-  const [jobUrl, setJobUrl] = useState(initial?.job_url ?? "");
+  const [url, setUrl] = useState(initial?.url ?? "");
   const [company, setCompany] = useState(initial?.company ?? "");
-  const [role, setRole] = useState(initial?.role ?? "");
+  const [jobTitle, setJobTitle] = useState(initial?.title ?? "");
+  const [location, setLocation] = useState(initial?.location ?? "");
+  const [pay, setPay] = useState(initial?.pay ?? "");
   const [status, setStatus] = useState<ApplicationStatus>(
     initial?.status ?? ApplicationStatus.Applied
   );
+  const [type, setType] = useState<ApplicationType | "">(
+    initial ? initial.type ?? "" : defaultType ?? ""
+  );
+  const currencyPrefix = defaultCurrency || "$";
   const [dateApplied, setDateApplied] = useState(
     () => initial?.date_applied?.split("T")[0] ?? localToday()
   );
   const [deadline, setDeadline] = useState(initial?.deadline ?? "");
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   // Safari shows today's date as placeholder text in an empty date input, which
   // reads as a pre-filled value. Hide the text while empty and unfocused.
   const [deadlineFocused, setDeadlineFocused] = useState(false);
@@ -53,6 +84,7 @@ export function ApplicationForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isToApply = status === ApplicationStatus.ToApply;
+  const companyRef = useRef<HTMLInputElement>(null);
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
@@ -61,12 +93,16 @@ export function ApplicationForm({
     try {
       const time = new Date().toTimeString().slice(0, 8);
       await onSubmit({
-        job_url: jobUrl || null,
+        url: url || null,
         company,
-        role,
+        title: jobTitle,
+        location: location || null,
+        pay: pay || null,
         status,
+        type: type || null,
         date_applied: isToApply || !dateApplied ? null : `${dateApplied}T${time}`,
         deadline: deadline || null,
+        notes: notes.trim() || null,
       });
     } catch {
       setError("Could not save application.");
@@ -76,7 +112,11 @@ export function ApplicationForm({
   }
 
   return (
-    <Dialog.Root open onOpenChange={(e) => !e.open && onCancel()}>
+    <Dialog.Root
+      open
+      onOpenChange={(e) => !e.open && onCancel()}
+      initialFocusEl={() => companyRef.current}
+    >
       <Portal>
         <Dialog.Backdrop />
         <Dialog.Positioner>
@@ -93,13 +133,12 @@ export function ApplicationForm({
                   </Alert.Root>
                 )}
                 <Field.Root>
-                  <Field.Label>Job URL</Field.Label>
+                  <Field.Label>URL</Field.Label>
                   <Input
                     type="url"
                     placeholder="https://..."
-                    value={jobUrl}
-                    onChange={(e) => setJobUrl(e.target.value)}
-                    autoFocus
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
                   />
                 </Field.Root>
                 <Flex gap="4">
@@ -108,38 +147,104 @@ export function ApplicationForm({
                       Company <Field.RequiredIndicator />
                     </Field.Label>
                     <Input
+                      ref={companyRef}
                       value={company}
                       onChange={(e) => setCompany(e.target.value)}
+                      list="company-suggestions"
                     />
+                    <datalist id="company-suggestions">
+                      {suggestions?.companies.map((c) => (
+                        <option key={c} value={c} />
+                      ))}
+                    </datalist>
                   </Field.Root>
                   <Field.Root required flex="1">
                     <Field.Label>
-                      Role <Field.RequiredIndicator />
+                      Job Title <Field.RequiredIndicator />
                     </Field.Label>
                     <Input
-                      value={role}
-                      onChange={(e) => setRole(e.target.value)}
+                      value={jobTitle}
+                      onChange={(e) => setJobTitle(e.target.value)}
+                      list="title-suggestions"
+                    />
+                    <datalist id="title-suggestions">
+                      {suggestions?.titles.map((t) => (
+                        <option key={t} value={t} />
+                      ))}
+                    </datalist>
+                  </Field.Root>
+                </Flex>
+                <Flex gap="4">
+                  <Field.Root flex="1">
+                    <Field.Label>Location</Field.Label>
+                    <Input
+                      placeholder="e.g. Austin, TX / Remote"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      list="location-suggestions"
+                    />
+                    <datalist id="location-suggestions">
+                      {suggestions?.locations.map((l) => (
+                        <option key={l} value={l} />
+                      ))}
+                    </datalist>
+                  </Field.Root>
+                  <Field.Root flex="1">
+                    <Field.Label>Pay</Field.Label>
+                    <Input
+                      placeholder="e.g. $25/hr or $110k"
+                      value={pay}
+                      onChange={(e) => setPay(e.target.value)}
+                      // Start with the user's default currency symbol on
+                      // focus; drop it again if left alone.
+                      onFocus={() => {
+                        if (!pay) setPay(currencyPrefix);
+                      }}
+                      onBlur={() => {
+                        if (pay === currencyPrefix) setPay("");
+                      }}
                     />
                   </Field.Root>
                 </Flex>
-                <Field.Root>
-                  <Field.Label>Status</Field.Label>
-                  <NativeSelect.Root>
-                    <NativeSelect.Field
-                      value={status}
-                      onChange={(e) =>
-                        setStatus(e.target.value as ApplicationStatus)
-                      }
-                    >
-                      {Object.values(ApplicationStatus).map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </NativeSelect.Field>
-                    <NativeSelect.Indicator />
-                  </NativeSelect.Root>
-                </Field.Root>
+                <Flex gap="4">
+                  <Field.Root flex="1">
+                    <Field.Label>Status</Field.Label>
+                    <NativeSelect.Root>
+                      <NativeSelect.Field
+                        value={status}
+                        onChange={(e) =>
+                          setStatus(e.target.value as ApplicationStatus)
+                        }
+                      >
+                        {Object.values(ApplicationStatus).map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </NativeSelect.Field>
+                      <NativeSelect.Indicator />
+                    </NativeSelect.Root>
+                  </Field.Root>
+                  <Field.Root flex="1">
+                    <Field.Label>Type</Field.Label>
+                    <NativeSelect.Root>
+                      <NativeSelect.Field
+                        value={type}
+                        onChange={(e) =>
+                          setType(e.target.value as ApplicationType | "")
+                        }
+                      >
+                        <option value="">—</option>
+                        {Object.values(ApplicationType).map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </NativeSelect.Field>
+                      <NativeSelect.Indicator />
+                    </NativeSelect.Root>
+                  </Field.Root>
+                </Flex>
                 <Flex gap="4">
                   <Field.Root flex="1" disabled={isToApply}>
                     <Field.Label>Applied Date</Field.Label>
@@ -148,6 +253,16 @@ export function ApplicationForm({
                       value={isToApply ? "" : dateApplied ?? ""}
                       onChange={(e) => setDateApplied(e.target.value)}
                       disabled={isToApply}
+                      css={
+                        isToApply
+                          ? {
+                              color: "transparent",
+                              "&::-webkit-datetime-edit": {
+                                color: "transparent",
+                              },
+                            }
+                          : undefined
+                      }
                     />
                   </Field.Root>
                   <Field.Root flex="1">
@@ -158,9 +273,13 @@ export function ApplicationForm({
                       onChange={(e) => setDeadline(e.target.value)}
                       onFocus={() => setDeadlineFocused(true)}
                       onBlur={() => setDeadlineFocused(false)}
+                      // Chrome exposes the ghost text via the datetime-edit
+                      // pseudo-element; desktop Safari doesn't, so also make
+                      // the input's own text transparent.
                       css={
                         !deadline && !deadlineFocused
                           ? {
+                              color: "transparent",
                               "&::-webkit-datetime-edit": {
                                 color: "transparent",
                               },
@@ -170,9 +289,30 @@ export function ApplicationForm({
                     />
                   </Field.Root>
                 </Flex>
+                <Field.Root>
+                  <Field.Label>Notes</Field.Label>
+                  <Textarea
+                    rows={3}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                </Field.Root>
               </Stack>
             </Dialog.Body>
             <Dialog.Footer>
+              {onDelete && (
+                <IconButton
+                  type="button"
+                  onClick={onDelete}
+                  aria-label="Delete application"
+                  title="Delete application"
+                  colorPalette="red"
+                  variant="ghost"
+                  mr="auto"
+                >
+                  <LuTrash2 />
+                </IconButton>
+              )}
               <Button type="button" onClick={onCancel} variant="ghost">
                 Cancel
               </Button>

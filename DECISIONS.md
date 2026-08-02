@@ -205,3 +205,28 @@ overrides:
 - Status colors map to Chakra palettes (Interview → orange since Chakra has no
   amber; "To Apply" uses an outline gray badge to stay distinct from
   Withdrawn's subtle gray, since Chakra has no slate).
+
+## Auth Sessions: Short access token + rotating refresh token
+Access tokens are back to 30 minutes; long-lived sessions come from a refresh
+token instead:
+- `refresh_tokens` table stores a SHA-256 hash (never the raw token), expiry,
+  and user FK with cascade delete. Rows are single-use: `/auth/refresh`
+  revokes the presented token and issues a new one (rotation), so a stolen
+  cookie stops working the next time the real client refreshes.
+- The raw refresh token lives only in an httpOnly `refresh_token` cookie
+  (SameSite=Lax, `path=/auth`, `Secure` via `COOKIE_SECURE` env), so frontend
+  JS — and any XSS payload — can never read it.
+- `/auth/logout` revokes server-side and clears the cookie; deleting the
+  account cascades away all refresh tokens.
+- Frontend axios client sets `withCredentials` and, on any 401 outside the
+  auth endpoints, performs a single-flight `POST /auth/refresh`, stores the
+  new access token, and replays the failed request once before falling back
+  to the login redirect. Session restore on page load just calls `/auth/me`
+  and lets that machinery run.
+
+## Backend Config: .env loaded with python-dotenv
+`dependencies.py` calls `load_dotenv()` on `backend/.env` (path anchored to
+the file, so it works regardless of uvicorn's cwd). `SECRET_KEY`,
+`ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS`, and
+`COOKIE_SECURE` come from there; `backend/.env` is gitignored and
+`backend/.env.example` documents the variables.

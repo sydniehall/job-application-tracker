@@ -1,6 +1,13 @@
 import client from "./client";
 import { token } from "./token";
-import type { DeleteAccount, Token, UserCreate, UserRead } from "../index";
+import type {
+  ChangePasswordRequest,
+  DeleteAccount,
+  Token,
+  UserCreate,
+  UserRead,
+  UserSettingsUpdate,
+} from "../index";
 
 export async function register(data: UserCreate): Promise<UserRead> {
   const res = await client.post<UserRead>("/auth/register", data);
@@ -23,12 +30,27 @@ export async function getMe(): Promise<UserRead> {
   return res.data;
 }
 
+export async function updateSettings(data: UserSettingsUpdate): Promise<UserRead> {
+  const res = await client.put<UserRead>("/auth/me", data);
+  return res.data;
+}
+
+export async function changePassword(data: ChangePasswordRequest): Promise<void> {
+  await client.post("/auth/change-password", data);
+}
+
 // Axios sends DELETE body via the `data` config key, not as the second argument.
 export async function deleteAccount(data: DeleteAccount): Promise<void> {
   await client.delete("/auth/me", { data });
 }
 
-// JWTs are stateless — logout is client-side only.
-export function logout(): void {
+// Revokes the refresh token server-side and clears the httpOnly cookie;
+// best-effort, since the local session must end either way.
+export async function logout(): Promise<void> {
+  try {
+    await client.post("/auth/logout");
+  } catch {
+    // Ignore — server-side revocation is best-effort.
+  }
   token.clear();
 }
