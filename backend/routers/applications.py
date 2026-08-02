@@ -16,6 +16,7 @@ from models import (
     ApplicationSuggestions,
     ApplicationType,
     ApplicationUpdate,
+    JobSearch,
     User,
 )
 
@@ -52,12 +53,24 @@ SORT_COLUMNS = {
 
 
 
+def _assert_owns_job_search(job_search_id: int, db: Session, current_user: User) -> None:
+    job_search = db.exec(
+        select(JobSearch).where(
+            JobSearch.id == job_search_id,
+            JobSearch.user_id == current_user.id,
+        )
+    ).first()
+    if not job_search:
+        raise HTTPException(status_code=404, detail="Job search not found")
+
+
 @router.post("", response_model=ApplicationRead, status_code=201)
 def create_application(
     application: ApplicationCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _assert_owns_job_search(application.job_search_id, db, current_user)
     db_application = Application.model_validate(application, update={"user_id": current_user.id})
     db.add(db_application)
     db.commit()
@@ -67,25 +80,31 @@ def create_application(
 
 @router.get("/suggestions", response_model=ApplicationSuggestions)
 def get_application_suggestions(
+    job_search_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     # Distinct existing values, offered as autocomplete suggestions in the
     # add/edit form. Independent of the paginated list below so suggestions
-    # stay complete regardless of what page/filter is currently loaded.
+    # stay complete regardless of what page/filter is currently loaded —
+    # but still scoped to a single job search, same as the list itself.
+    base_filters = [Application.user_id == current_user.id]
+    if job_search_id is not None:
+        base_filters.append(Application.job_search_id == job_search_id)
+
     companies = db.exec(
         select(Application.company)
-        .where(Application.user_id == current_user.id)
+        .where(*base_filters)
         .distinct()
     ).all()
     titles = db.exec(
         select(Application.title)
-        .where(Application.user_id == current_user.id)
+        .where(*base_filters)
         .distinct()
     ).all()
     locations = db.exec(
         select(Application.location)
-        .where(Application.user_id == current_user.id, Application.location.is_not(None))
+        .where(*base_filters, Application.location.is_not(None))
         .distinct()
     ).all()
     return ApplicationSuggestions(
@@ -104,6 +123,7 @@ def get_applications(
     type: Optional[ApplicationType] = None,
     date_applied_from: Optional[date] = None,
     date_applied_to: Optional[date] = None,
+    job_search_id: Optional[int] = None,
     titles: list[str] = Query(default=[]),
     companies: list[str] = Query(default=[]),
     locations: list[str] = Query(default=[]),
@@ -113,6 +133,9 @@ def get_applications(
     current_user: User = Depends(get_current_user),
 ):
     query = select(Application).where(Application.user_id == current_user.id)
+
+    if job_search_id is not None:
+        query = query.where(Application.job_search_id == job_search_id)
 
     if q:
         pattern = f"%{q}%"
@@ -180,6 +203,8 @@ def update_application(
     if not db_application:
         raise HTTPException(status_code=404, detail="Application not found")
     update_data = application.model_dump(exclude_unset=True)
+    if update_data.get("job_search_id") is not None:
+        _assert_owns_job_search(update_data["job_search_id"], db, current_user)
     db_application.sqlmodel_update(update_data)
     db.add(db_application)
     db.commit()

@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from database import create_db_and_tables
 from routers.auth import router as auth_router
 from routers.applications import router as applications_router
+from routers.job_searches import router as job_searches_router
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -15,6 +16,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.include_router(auth_router)
 app.include_router(applications_router)
+app.include_router(job_searches_router)
 
 app.add_middleware(
     CORSMiddleware,
