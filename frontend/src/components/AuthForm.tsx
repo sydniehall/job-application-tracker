@@ -9,6 +9,7 @@ import {
   Card,
   Center,
   Field,
+  Flex,
   Heading,
   IconButton,
   Input,
@@ -16,7 +17,7 @@ import {
   Stack,
   Text,
 } from "@chakra-ui/react";
-import { LuEye, LuEyeOff } from "react-icons/lu";
+import { LuBriefcase, LuEye, LuEyeOff } from "react-icons/lu";
 
 interface AuthFormProps {
   mode: "login" | "register";
@@ -45,11 +46,15 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
       const isAuthFailure =
         axios.isAxiosError(err) && err.response !== undefined && err.response.status < 500;
       if (isAuthFailure) {
-        setError(
-          isLogin
-            ? "Incorrect email or password"
-            : "Could not register. Check your details and try again."
-        );
+        if (isLogin) {
+          setError("Incorrect email or password");
+        } else {
+          const detail =
+            axios.isAxiosError(err) && typeof err.response?.data?.detail === "string"
+              ? err.response.data.detail
+              : "Could not register. Check your details and try again.";
+          setError(detail);
+        }
       } else {
         setError("Something went wrong. Please check your connection and try again.");
       }
@@ -60,13 +65,20 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
 
   return (
     <Center minH="100vh" bg="bg.subtle" px="4">
-      <Card.Root as="form" onSubmit={handleSubmit} w="full" maxW="sm">
-        <Card.Header>
-          <Heading size="xl" textAlign="center">
-            {isLogin ? "Log In" : "Register"}
+      <Stack gap="6" w="full" maxW="sm" align="center">
+        <Flex align="center" gap="2" color="fg.muted">
+          <LuBriefcase size={22} />
+          <Heading size="lg" color="fg" fontWeight="semibold">
+            Simple Job Tracker
           </Heading>
-        </Card.Header>
-        <Card.Body>
+        </Flex>
+        <Card.Root as="form" onSubmit={handleSubmit} w="full">
+          <Card.Header>
+            <Heading size="md" textAlign="center" color="fg.muted" fontWeight="medium">
+              {isLogin ? "Log In" : "Register"}
+            </Heading>
+          </Card.Header>
+          <Card.Body>
           <Stack gap="4">
             {error && (
               <Alert.Root status="error" size="sm">
@@ -115,6 +127,11 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
                   {showPassword ? <LuEyeOff /> : <LuEye />}
                 </IconButton>
               </Box>
+              {!isLogin && (
+                <Field.HelperText>
+                  At least 8 characters, using standard letters, numbers, and symbols
+                </Field.HelperText>
+              )}
             </Field.Root>
           </Stack>
         </Card.Body>
@@ -140,7 +157,8 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
             )}
           </Text>
         </Card.Footer>
-      </Card.Root>
+        </Card.Root>
+      </Stack>
     </Center>
   );
 }
