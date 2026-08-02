@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from database import create_db_and_tables
@@ -18,9 +19,16 @@ app.include_router(auth_router)
 app.include_router(applications_router)
 app.include_router(job_searches_router)
 
+# Comma-separated list, e.g. "https://my-app.vercel.app,https://my-app-git-main.vercel.app"
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

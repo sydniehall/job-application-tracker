@@ -26,6 +26,11 @@ REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
 # Set COOKIE_SECURE=true in production (HTTPS) so the cookie is never sent
 # over plain HTTP. Must stay false for local http://localhost development.
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+# Frontend and backend live on different domains in production (Vercel +
+# Railway), so the refresh cookie needs SameSite=None to be sent on
+# cross-site requests. Browsers require Secure whenever SameSite=None, which
+# is exactly when COOKIE_SECURE is true, so the two stay in lockstep.
+COOKIE_SAMESITE = "none" if COOKIE_SECURE else "lax"
 REFRESH_COOKIE_NAME = "refresh_token"
 # The cookie is only ever needed by /auth/refresh and /auth/logout, so scope
 # it to /auth instead of sending it with every request.
@@ -99,7 +104,7 @@ def set_refresh_cookie(response: Response, raw: str) -> None:
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
         path=REFRESH_COOKIE_PATH,
     )
 

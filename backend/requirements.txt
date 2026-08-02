@@ -12,6 +12,7 @@ h11==0.16.0
 idna==3.16
 pyasn1==0.6.3
 pycparser==3.0
+psycopg2-binary==2.9.10
 pydantic_core==2.46.4
 pydantic==2.13.4
 python-dotenv==1.2.2
