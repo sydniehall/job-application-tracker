@@ -20,11 +20,23 @@ import {
 import { LuArrowLeft, LuEye, LuEyeOff } from "react-icons/lu";
 import { useAuth } from "../context/AuthContext";
 import { changePassword } from "../api/auth";
-import { ApplicationType } from "../index";
+
+const CURRENCY_OPTIONS: { value: string; label: string }[] = [
+  { value: "$", label: "USD ($)" },
+  { value: "€", label: "EUR (€)" },
+  { value: "£", label: "GBP (£)" },
+  { value: "¥", label: "JPY (¥)" },
+  { value: "₹", label: "INR (₹)" },
+  { value: "C$", label: "CAD (C$)" },
+  { value: "A$", label: "AUD (A$)" },
+  { value: "CHF", label: "CHF (CHF)" },
+  { value: "₩", label: "KRW (₩)" },
+  { value: "R$", label: "BRL (R$)" },
+];
 
 const SORT_FIELD_LABELS: Record<string, string> = {
   created_at: "Date Added",
-  title: "Title",
+  title: "Job Title",
   company: "Company",
   status: "Status",
   location: "Location",
@@ -90,9 +102,6 @@ export function Account() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const [defaultCurrency, setDefaultCurrency] = useState(user?.default_currency ?? "$");
-  const [defaultType, setDefaultType] = useState<ApplicationType | "">(
-    user?.default_application_type ?? ""
-  );
   const [defaultSortField, setDefaultSortField] = useState(user?.default_sort_field ?? "created_at");
   const [defaultSortDir, setDefaultSortDir] = useState(user?.default_sort_dir ?? "desc");
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -133,7 +142,6 @@ export function Account() {
     try {
       await updateSettings({
         default_currency: defaultCurrency || "$",
-        default_application_type: defaultType || null,
         default_sort_field: defaultSortField,
         default_sort_dir: defaultSortDir,
       });
@@ -250,24 +258,19 @@ export function Account() {
                   )}
                   <Field.Root>
                     <Field.Label>Default Currency</Field.Label>
-                    <Input
-                      value={defaultCurrency}
-                      onChange={(e) => setDefaultCurrency(e.target.value)}
-                      maxLength={3}
-                      w="20"
-                    />
-                  </Field.Root>
-                  <Field.Root>
-                    <Field.Label>Default Application Type</Field.Label>
-                    <NativeSelect.Root>
+                    <NativeSelect.Root w="40">
                       <NativeSelect.Field
-                        value={defaultType}
-                        onChange={(e) => setDefaultType(e.target.value as ApplicationType | "")}
+                        value={defaultCurrency}
+                        onChange={(e) => setDefaultCurrency(e.target.value)}
                       >
-                        <option value="">—</option>
-                        {Object.values(ApplicationType).map((t) => (
-                          <option key={t} value={t}>
-                            {t}
+                        {/* Keeps a previously-saved custom symbol selectable/visible
+                            instead of silently falling back to a blank selection. */}
+                        {!CURRENCY_OPTIONS.some((c) => c.value === defaultCurrency) && (
+                          <option value={defaultCurrency}>{defaultCurrency}</option>
+                        )}
+                        {CURRENCY_OPTIONS.map((c) => (
+                          <option key={c.value} value={c.value}>
+                            {c.label}
                           </option>
                         ))}
                       </NativeSelect.Field>
