@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   CloseButton,
   DataList,
@@ -6,8 +7,9 @@ import {
   IconButton,
   Link,
   Portal,
+  Text,
 } from "@chakra-ui/react";
-import { LuExternalLink, LuFilePlus, LuFileText } from "react-icons/lu";
+import { LuExternalLink, LuFileText } from "react-icons/lu";
 import { StatusBadge } from "./StatusBadge";
 import type { ApplicationRead } from "../index";
 
@@ -50,6 +52,16 @@ export function ApplicationDetails({
   onClose,
   onOpenNote,
 }: ApplicationDetailsProps) {
+  const notesRef = useRef<HTMLParagraphElement>(null);
+  const [isNotesTruncated, setIsNotesTruncated] = useState(false);
+
+  // The note is clamped to one line — the "view note" button only makes
+  // sense (and only appears) when that clamp actually cut something off.
+  useLayoutEffect(() => {
+    const el = notesRef.current;
+    setIsNotesTruncated(Boolean(el && el.scrollHeight > el.clientHeight + 1));
+  }, [application.notes]);
+
   return (
     <Dialog.Root open onOpenChange={(e) => !e.open && onClose()}>
       <Portal>
@@ -62,7 +74,7 @@ export function ApplicationDetails({
             <Dialog.Body>
               <DataList.Root orientation="horizontal">
                 <DataList.Item>
-                  <DataList.ItemLabel>Title</DataList.ItemLabel>
+                  <DataList.ItemLabel>Job Title</DataList.ItemLabel>
                   <DataList.ItemValue>{application.title}</DataList.ItemValue>
                 </DataList.Item>
                 <DataList.Item>
@@ -71,19 +83,19 @@ export function ApplicationDetails({
                 </DataList.Item>
                 <DataList.Item>
                   <DataList.ItemLabel>Location</DataList.ItemLabel>
-                  <DataList.ItemValue>
+                  <DataList.ItemValue color={application.location ? undefined : "fg.subtle"}>
                     {application.location || "—"}
                   </DataList.ItemValue>
                 </DataList.Item>
                 <DataList.Item>
                   <DataList.ItemLabel>Pay</DataList.ItemLabel>
-                  <DataList.ItemValue>
+                  <DataList.ItemValue color={application.pay ? undefined : "fg.subtle"}>
                     {application.pay || "—"}
                   </DataList.ItemValue>
                 </DataList.Item>
                 <DataList.Item>
                   <DataList.ItemLabel>Type</DataList.ItemLabel>
-                  <DataList.ItemValue>
+                  <DataList.ItemValue color={application.type ? undefined : "fg.subtle"}>
                     {application.type || "—"}
                   </DataList.ItemValue>
                 </DataList.Item>
@@ -95,7 +107,7 @@ export function ApplicationDetails({
                 </DataList.Item>
                 <DataList.Item>
                   <DataList.ItemLabel>URL</DataList.ItemLabel>
-                  <DataList.ItemValue>
+                  <DataList.ItemValue color={application.url ? undefined : "fg.subtle"}>
                     {application.url ? (
                       <Link
                         href={application.url}
@@ -114,13 +126,13 @@ export function ApplicationDetails({
                 </DataList.Item>
                 <DataList.Item>
                   <DataList.ItemLabel>Date Applied</DataList.ItemLabel>
-                  <DataList.ItemValue>
+                  <DataList.ItemValue color={application.date_applied ? undefined : "fg.subtle"}>
                     {formatDate(application.date_applied)}
                   </DataList.ItemValue>
                 </DataList.Item>
                 <DataList.Item>
                   <DataList.ItemLabel>Deadline</DataList.ItemLabel>
-                  <DataList.ItemValue>
+                  <DataList.ItemValue color={application.deadline ? undefined : "fg.subtle"}>
                     {formatDate(application.deadline)}
                   </DataList.ItemValue>
                 </DataList.Item>
@@ -128,36 +140,45 @@ export function ApplicationDetails({
                   <DataList.ItemLabel>Notes</DataList.ItemLabel>
                   <DataList.ItemValue>
                     <Flex align="center" gap="2">
-                      {application.notes || "—"}
-                      <IconButton
-                        onClick={onOpenNote}
-                        aria-label={application.notes ? "View note" : "Add note"}
-                        title={application.notes ? "View note" : "Add note"}
-                        variant="ghost"
-                        size="2xs"
-                        color="fg.subtle"
-                        _hover={{ color: "fg" }}
+                      <Text
+                        ref={notesRef}
+                        lineClamp="1"
+                        color={application.notes ? undefined : "fg.subtle"}
                       >
-                        {application.notes ? <LuFileText /> : <LuFilePlus />}
-                      </IconButton>
+                        {application.notes || "—"}
+                      </Text>
+                      {isNotesTruncated && (
+                        <IconButton
+                          onClick={onOpenNote}
+                          aria-label="View note"
+                          title="View note"
+                          variant="ghost"
+                          size="2xs"
+                          color="fg.subtle"
+                          _hover={{ color: "fg" }}
+                          flexShrink="0"
+                        >
+                          <LuFileText />
+                        </IconButton>
+                      )}
                     </Flex>
                   </DataList.ItemValue>
                 </DataList.Item>
                 <DataList.Item>
                   <DataList.ItemLabel>Resume Version</DataList.ItemLabel>
-                  <DataList.ItemValue>
+                  <DataList.ItemValue color={application.resume_version ? undefined : "fg.subtle"}>
                     {application.resume_version || "—"}
                   </DataList.ItemValue>
                 </DataList.Item>
                 <DataList.Item>
                   <DataList.ItemLabel>Created</DataList.ItemLabel>
-                  <DataList.ItemValue>
+                  <DataList.ItemValue color={application.created_at ? undefined : "fg.subtle"}>
                     {formatDateTime(application.created_at)}
                   </DataList.ItemValue>
                 </DataList.Item>
                 <DataList.Item>
                   <DataList.ItemLabel>Last Updated</DataList.ItemLabel>
-                  <DataList.ItemValue>
+                  <DataList.ItemValue color={application.updated_at ? undefined : "fg.subtle"}>
                     {formatDateTime(application.updated_at)}
                   </DataList.ItemValue>
                 </DataList.Item>
