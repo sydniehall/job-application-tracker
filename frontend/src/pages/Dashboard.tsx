@@ -584,8 +584,11 @@ export function Dashboard() {
     getJobSearches()
       .then((list) => {
         if (cancelled) return;
-        setJobSearches(list);
-        const active = list.filter((js) => !js.archived);
+        // Guards against a malformed response (e.g. an HTML error page
+        // returned instead of JSON) crashing the whole dashboard.
+        const jobSearchList = Array.isArray(list) ? list : [];
+        setJobSearches(jobSearchList);
+        const active = jobSearchList.filter((js) => !js.archived);
         const persistedId = user ? loadPersistedJobSearchId(user.id) : null;
         const persisted = persistedId !== null ? active.find((js) => js.id === persistedId) : undefined;
         setCurrentJobSearchId(persisted ? persisted.id : active[0]?.id ?? null);
