@@ -22,7 +22,8 @@ app.include_router(job_searches_router)
 # Comma-separated list, e.g. "https://my-app.vercel.app,https://my-app-git-main.vercel.app"
 DEFAULT_ALLOWED_ORIGINS = (
     "http://localhost:5173,"
-    "https://job-application-tracker-git-main-syds-projects1.vercel.app"
+    "https://job-application-tracker-git-main-syds-projects1.vercel.app,"
+    "https://job-application-tracker-six-coral.vercel.app"
 )
 allowed_origins = [
     origin.strip()
